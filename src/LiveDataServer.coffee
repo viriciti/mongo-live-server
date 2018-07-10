@@ -193,7 +193,7 @@ class LiveDataServer
 				else
 					throw new Error "Recieved unknown operation type! --> #{operationType}"
 
-			socket.send (JSON.stringify [operationType]: data), (error) =>
+			socket.send (JSON.stringify "#{operationType}": data), (error) =>
 				@log.error error if error
 
 		closeDown = =>
