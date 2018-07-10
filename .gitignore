@@ -1,0 +1,8 @@
+node_modules
+npm-debug.log
+config/local.coffee
+build
+coverage
+.nyc_output
+*.log
+package-lock.json
