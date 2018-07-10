@@ -24,7 +24,7 @@ class LiveDataServer
 		@httpServer          or= http.createServer()
 		@changeStreams         = {}
 		@wsServers             = []
-		@defaultOperationTypes = ["update", "insert", "delete"]
+		@defaultOperationTypes = ["update", "insert"]
 
 		# two more operation types
 		# @defaultOperationTypes = ["update", "insert", "delete", "replace", "invalidate"]
@@ -84,7 +84,6 @@ class LiveDataServer
 			diff = _.difference ids, allChargestations
 
 			if diff.length
-				console.log('diff: ', diff);
 				return cb new Error "User attempted to subscribe to not allowed ids! #{diff.join " "}"
 
 			cb null, ids
@@ -188,8 +187,6 @@ class LiveDataServer
 				when "update"
 					extra = _.pick change.fullDocument, extension
 					data  = _.extend {}, change.updateDescription.updatedFields, extra
-				when "delete"
-					data   = _id: change.fullDocument._id
 				else
 					throw new Error "Recieved unknown operation type! --> #{operationType}"
 
