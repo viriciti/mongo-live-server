@@ -72,8 +72,10 @@ describe "LiveDataServer Test", ->
 
 		message
 
-	describe "WebSocket interaction test", ->
+	describe "WebSocket mongo connect interaction test", ->
 		before (done) ->
+			@timeout 300000
+
 			async.series [
 				(cb) ->
 					mongoConnector.initReplset cb
