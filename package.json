@@ -1,6 +1,6 @@
 {
   "name": "@tn-group/cs-live-data-server",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "scripts": {
     "precommit": "npm test",
     "test": "DEBUG=mongo-connector,cs-live-data-server NODE_ENV=test nyc mocha",
@@ -38,6 +38,7 @@
     "prom-client": "^11.1.1",
     "qs": "^6.5.2",
     "underscore": "^1.9.1",
+    "uuid": "^3.3.2",
     "ws": "^5.2.1"
   },
   "devDependencies": {
