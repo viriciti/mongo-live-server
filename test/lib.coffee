@@ -10,6 +10,8 @@ module.exports =
 
 			identity:       type: String, unique: true
 
+			forbiddenField: type: String
+
 			lastHeartbeat:  type: Date
 
 			alive:
