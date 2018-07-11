@@ -36,6 +36,9 @@ describe "LiveDataServer Test", ->
 			chargestation: "sakifs second station"
 		,
 			identity:      "sakif"
+			chargestation: "read this"
+		,
+			identity:      "sakif"
 			chargestation: "hidden charge station"
 		,
 			identity:      "pim"
@@ -98,9 +101,10 @@ describe "LiveDataServer Test", ->
 							port:         config.port
 							host:         config.host
 						watches: [
-							path:        "chargestations"
-							model:       "Chargestation"
-							identityKey: "identity"
+							path:             "chargestations"
+							model:            "Chargestation"
+							identityKey:      "identity"
+							blacklistFields: ["forbiddenField"]
 						]
 
 					liveDataServer.start cb
@@ -231,9 +235,46 @@ describe "LiveDataServer Test", ->
 					, WAIT_FOR_WATCH
 			return
 
-		it "for specified operation type(s) (and also filter fields)", (done) ->
-			@timeout 20 * 1000
+		it "not response with forbidden fields", (done) ->
+			identity = aclGroups[0].identity
 
+			options =
+				headers:
+					"identity": identity
+
+			query = qs.stringify extension: ["identity"]
+
+			path = "#{address}/chargestations/live?#{query}"
+
+			socket = new WebSocket path, options
+
+			socket.on "message", (message) ->
+				message = parseMessage message
+
+				assert.ok not message.insert.forbiddenField, "did send forbidden field!"
+				socket.close()
+				done()
+
+			databaseFlow = ->
+				data =
+					identity:       "read this"
+					forbiddenField: "don't read this"
+
+				(new models.Chargestation data).save (error) ->
+					return done error if error
+
+			socket
+				.once "error", done
+				.once "open", () ->
+
+					setTimeout ->
+
+						databaseFlow()
+
+					, WAIT_FOR_WATCH
+			return
+
+		it "for specified operation type(s) (and also filter fields)", (done) ->
 			identity = aclGroups[0].identity
 
 			options =

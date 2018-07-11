@@ -44,14 +44,16 @@ class LiveDataServer
 			help:       "Counts the connected sockets"
 			labelNames: [ "identity" ]
 
-		_.each watches, (watch) =>
-			{ path, model } = watch
+		_.each watches, (watchConf) =>
+			{ path, model, blacklistFields } = watchConf
+			livePath                         = "/#{path}/live"
 
-			debug "Setting up web socket server for path: #{path} and model: #{model}."
+			debug "Setting up web socket server for path: #{livePath} and mongoose model: #{model}.
+			 Blacklist: #{blacklistFields?.join " "}"
 
-			server = new WebSocket.Server server: @httpServer, path: "/#{path}/live"
+			server = new WebSocket.Server server: @httpServer, path: livePath
 
-			server.on "connection", @_handleConnection.bind @, watch
+			server.on "connection", @_handleConnection.bind @, watchConf
 
 			@wsServers.push server
 
@@ -135,7 +137,7 @@ class LiveDataServer
 			@_updateGaugeStreams()
 
 	_handleConnection: (watch, socket, req) =>
-		{ identityKey, model }   = watch
+		{ identityKey, model, blacklistFields } = watch
 		userIdentity             = req.headers["identity"]
 		streamId                 = uuid.v4()
 		ip                       = req.connection.remoteAddress
@@ -143,14 +145,14 @@ class LiveDataServer
 		query                    = qs.parse splitUrl[1]
 		subscribe                = query.subscribe or @defaultOperationTypes
 		{
-			filter    = []
-			extension = []
-			ids       = []
+			filter          = []
+			extension       = []
+			ids             = []
 		} = query
 
-		extension = [ extension ] if typeof extension is "string"
-		filter    = [ filter ]    if typeof filter is "string"
-		ids       = [ ids ]       if typeof ids is "string"
+		extension       = [ extension ]       if typeof extension is "string"
+		filter          = [ filter ]          if typeof filter is "string"
+		ids             = [ ids ]             if typeof ids is "string"
 
 		pipeline = [
 			$match:
@@ -163,7 +165,7 @@ class LiveDataServer
 		pipeline[0].$match.$and.push $or: operationCondition
 
 		##########################
-		# TODO if filter, apply it in two ways
+		# TODO if filter and/or excludeFields, apply it in two ways
 		##########################
 
 		# 	trigger only on changes on these fields
@@ -183,12 +185,19 @@ class LiveDataServer
 
 			switch operationType
 				when "insert"
-					data = _.pick change.fullDocument, filter
+					if filter.length
+						data = _.pick change.fullDocument, filter
+					else
+						data = change.fullDocument
+
 				when "update"
 					extra = _.pick change.fullDocument, extension
 					data  = _.extend {}, change.updateDescription.updatedFields, extra
+
 				else
 					throw new Error "Recieved unknown operation type! --> #{operationType}"
+
+			data = _.omit data, blacklistFields
 
 			socket.send (JSON.stringify "#{operationType}": data), (error) =>
 				@log.error error if error
@@ -202,11 +211,7 @@ class LiveDataServer
 			@changeStreams[streamId].close()
 			delete @changeStreams[streamId]
 
-			# This check is unnecessary since .close event always only happens once
-			# unless [ WebSocket.CLOSING, WebSocket.CLOSED ].includes socket.readyState
-
-			# close or disconnect?
-			socket.removeAllListeners [ "close" ]
+			# socket.removeAllListeners [ "close" ]
 			socket.close()
 
 			@_updateGaugeStreams()
@@ -232,8 +237,8 @@ class LiveDataServer
 			@log.error "Websocket error: #{error.message}"
 
 		socket
-			.on "close", handleSocketDisconnect
-			.on "error", handleSocketError
+			.once "close", handleSocketDisconnect
+			.once "error", handleSocketError
 
 		@_updateGaugeSockets()
 
@@ -267,19 +272,6 @@ class LiveDataServer
 
 	stop: (cb) =>
 		debug "live data server stop"
-
-		# this shouldn't be necessary, for sockets should close when http server closes
-		# _.each @wsServers, (server) ->
-		# 	_.each (_.values server.clients), (socket) ->
-		# 		# close or disconnect?
-		# 		close = false # disconnect just namespace or underlying connection
-		# 		socket.disconnect close
-		# 		socket.close()
-
-		# this shouldn't be necessary, for we have onClose functions
-		# _.each (_.values @changeStreams), (stream) ->
-		# 	stream.removeAllListeners [ "close" ]
-		# 	stream.close()
 
 		return cb() if @unControlledHTTP
 		return cb() unless @httpServer.listening
