@@ -1,6 +1,6 @@
 {
   "name": "@tn-group/cs-live-data-server",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "scripts": {
     "precommit": "npm test",
     "test": "DEBUG=mongo-connector,cs-live-data-server NODE_ENV=test nyc mocha",
