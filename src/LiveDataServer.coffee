@@ -44,12 +44,12 @@ class LiveDataServer
 			help:       "Counts the connected sockets"
 			labelNames: [ "identity" ]
 
-		# _.each watches, (watchConf) =>
-		# 	{ path, model, blacklistFields } = watchConf
-		# 	livePath                         = "/#{path}/live"
+		_.each @watches, (watchConf) ->
+			{ path, model, blacklistFields } = watchConf
+			livePath                         = "/#{path}/live"
 
-		# 	debug "Setting up web socket server for path: #{livePath} and mongoose model: #{model}.
-		# 	 Blacklist: #{blacklistFields?.join " "}"
+			debug "Setting up web socket server for path: #{livePath} and mongoose model: #{model}.
+			 Blacklist: #{blacklistFields?.join " "}"
 
 		@wsServer = new WebSocket.Server server: @httpServer
 
