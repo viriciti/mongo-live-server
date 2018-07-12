@@ -90,7 +90,7 @@ class LiveDataServer
 
 			cb null, ids
 
-	_setupStream: (payload) =>
+	_setupStream: (payload, cb) =>
 		{
 			onChange
 			onClose
@@ -100,6 +100,7 @@ class LiveDataServer
 			model
 			pipeline
 			userIdentity
+			socket
 		} = payload
 
 		@_getAllowed {
@@ -108,12 +109,12 @@ class LiveDataServer
 			onClose
 		}, (error, allowed) =>
 			if error
-				@log.error "Error getting allowed chargestations: #{error}", {
-					userIdentity
-					ids
-					model
-				}
-				return onClose()
+				mssg = "Error getting allowed chargestations for #{userIdentity}: #{error}"
+				debug mssg, { userIdentity, ids, model }
+				return cb new Error mssg
+
+			if [ WebSocket.CLOSED, WebSocket.CLOSING ].includes socket.readyState
+				return cb new Error "Socket disconnected while getting ACL"
 
 			pipeline[0].$match.$and or= []
 			pipeline[0].$match.$and.push "fullDocument.#{identityKey}": $in: allowed
@@ -135,6 +136,8 @@ class LiveDataServer
 			@changeStreams[streamId] = cursor
 
 			@_updateGaugeStreams()
+
+			cb()
 
 	_handleConnection: (watch, socket, req) =>
 		{ identityKey, model, blacklistFields } = watch
@@ -240,8 +243,6 @@ class LiveDataServer
 			.once "close", handleSocketDisconnect
 			.once "error", handleSocketError
 
-		@_updateGaugeSockets()
-
 		@_setupStream {
 			onClose: closeDown
 			ids
@@ -255,7 +256,13 @@ class LiveDataServer
 			userIdentity
 			streamId
 			onChange
-		}
+			socket
+		}, (error) =>
+			if error
+				@log.error error.message
+				return closeDown()
+
+			@_updateGaugeSockets()
 
 	start: (cb) =>
 		debug "live data server start"
