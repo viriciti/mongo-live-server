@@ -151,13 +151,14 @@ class LiveDataServer
 		query                    = qs.parse splitUrl[1]
 		subscribe                = query.subscribe or @defaultOperationTypes
 		{
-			filter          = []
+			fields          = []
 			extension       = []
 			ids             = []
 		} = query
 
 		extension       = [ extension ]       if typeof extension is "string"
-		filter          = [ filter ]          if typeof filter is "string"
+		subscribe       = [ subscribe ]       if typeof subscribe is "string"
+		fields          = [ fields ]          if typeof fields is "string"
 		ids             = [ ids ]             if typeof ids is "string"
 
 		pipeline = [
@@ -171,7 +172,7 @@ class LiveDataServer
 		pipeline[0].$match.$and.push $or: operationCondition
 
 		##########################
-		# TODO if filter and/or excludeFields, apply it in two ways
+		# TODO if fields and/or excludeFields, apply it in two ways
 		##########################
 
 		# 	trigger only on changes on these fields
@@ -191,8 +192,8 @@ class LiveDataServer
 
 			switch operationType
 				when "insert"
-					if filter.length
-						data = _.pick change.fullDocument, filter
+					if fields.length
+						data = _.pick change.fullDocument, fields
 					else
 						data = change.fullDocument
 
@@ -223,10 +224,11 @@ class LiveDataServer
 			@_updateGaugeStreams()
 
 		@log.info "Client connected", {
+			url
 			ip
 			extension
 			ids
-			filter
+			fields
 			subscribe
 			userIdentity
 		}
@@ -250,7 +252,7 @@ class LiveDataServer
 			onClose: closeDown
 			ids
 			extension
-			filter
+			fields
 			identityKey
 			subscribe
 			pipeline

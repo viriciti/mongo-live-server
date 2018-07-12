@@ -327,7 +327,7 @@ describe "LiveDataServer Test", ->
 					, WAIT_FOR_WATCH
 			return
 
-		it "for specified operation type(s) (and also filter fields)", (done) ->
+		it "for specified operation type(s) (and also fields fields)", (done) ->
 			identity = aclGroups[0].identity
 
 			options =
@@ -336,7 +336,7 @@ describe "LiveDataServer Test", ->
 
 			query = qs.stringify
 				subscribe: ["insert"]
-				filter:    ["identity", "active"]
+				fields:    ["identity", "active"]
 
 			path = "#{address}/chargestations/live?#{query}"
 
