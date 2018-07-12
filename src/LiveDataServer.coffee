@@ -9,7 +9,7 @@ WebSocket            = require "ws"
 
 
 class LiveDataServer
-	constructor: ({ @options = {}, @httpServer, log, @mongoConnector, @aclClient, watches }) ->
+	constructor: ({ @options = {}, @httpServer, log, @mongoConnector, @aclClient, @watches }) ->
 		@log        = log or (require "@tn-group/log") label: "live-data-server"
 		metricLabel = (@log.label ? "live-data-server").replace /-/g, "_"
 
@@ -44,18 +44,16 @@ class LiveDataServer
 			help:       "Counts the connected sockets"
 			labelNames: [ "identity" ]
 
-		_.each watches, (watchConf) =>
-			{ path, model, blacklistFields } = watchConf
-			livePath                         = "/#{path}/live"
+		# _.each watches, (watchConf) =>
+		# 	{ path, model, blacklistFields } = watchConf
+		# 	livePath                         = "/#{path}/live"
 
-			debug "Setting up web socket server for path: #{livePath} and mongoose model: #{model}.
-			 Blacklist: #{blacklistFields?.join " "}"
+		# 	debug "Setting up web socket server for path: #{livePath} and mongoose model: #{model}.
+		# 	 Blacklist: #{blacklistFields?.join " "}"
 
-			server = new WebSocket.Server server: @httpServer, path: livePath
+		@wsServer = new WebSocket.Server server: @httpServer
 
-			server.on "connection", @_handleConnection.bind @, watchConf
-
-			@wsServers.push server
+		@wsServer.on "connection", @_handleConnection
 
 	_updateGaugeStreams: =>
 		mnt = (_.keys @changeStreams).length
@@ -65,9 +63,7 @@ class LiveDataServer
 		@gaugeStreams.set mnt
 
 	_updateGaugeSockets: =>
-		mnt = _.reduce @wsServers, (tot, server) ->
-			tot + Number server.clients.size
-		, 0
+		mnt = @wsServer.clients.size
 
 		debug "Updating amount of sockets gauge: #{mnt}"
 
@@ -90,7 +86,7 @@ class LiveDataServer
 
 			cb null, ids
 
-	_setupStream: (payload) =>
+	_setupStream: (payload, cb) =>
 		{
 			onChange
 			onClose
@@ -100,6 +96,7 @@ class LiveDataServer
 			model
 			pipeline
 			userIdentity
+			socket
 		} = payload
 
 		@_getAllowed {
@@ -108,12 +105,12 @@ class LiveDataServer
 			onClose
 		}, (error, allowed) =>
 			if error
-				@log.error "Error getting allowed chargestations: #{error}", {
-					userIdentity
-					ids
-					model
-				}
-				return onClose()
+				mssg = "Error getting allowed chargestations for #{userIdentity}: #{error}"
+				debug mssg, { userIdentity, ids, model }
+				return cb new Error mssg
+
+			if [ WebSocket.CLOSED, WebSocket.CLOSING ].includes socket.readyState
+				return cb new Error "Socket disconnected while getting ACL"
 
 			pipeline[0].$match.$and or= []
 			pipeline[0].$match.$and.push "fullDocument.#{identityKey}": $in: allowed
@@ -136,8 +133,17 @@ class LiveDataServer
 
 			@_updateGaugeStreams()
 
-	_handleConnection: (watch, socket, req) =>
-		{ identityKey, model, blacklistFields } = watch
+			cb()
+
+	_handleConnection: (socket, req) =>
+		url = req.url.split("/live").shift().slice(1)
+
+		route = _.find @watches, path: url
+
+		unless route
+			return socket.close 4004, "#{req.url} not found"
+
+		{ identityKey, model, blacklistFields } = route
 		userIdentity             = req.headers["identity"]
 		streamId                 = uuid.v4()
 		ip                       = req.connection.remoteAddress
@@ -240,8 +246,6 @@ class LiveDataServer
 			.once "close", handleSocketDisconnect
 			.once "error", handleSocketError
 
-		@_updateGaugeSockets()
-
 		@_setupStream {
 			onClose: closeDown
 			ids
@@ -255,7 +259,13 @@ class LiveDataServer
 			userIdentity
 			streamId
 			onChange
-		}
+			socket
+		}, (error) =>
+			if error
+				@log.error error.message
+				return closeDown()
+
+			@_updateGaugeSockets()
 
 	start: (cb) =>
 		debug "live data server start"
@@ -274,9 +284,8 @@ class LiveDataServer
 		debug "live data server stop"
 
 		# Sockets do NOT close when http server.close is called
-		_.each @wsServers, (server) ->
-			server.clients.forEach (client) ->
-				client.close()
+		@wsServer.clients.forEach (client) ->
+			client.close()
 
 		# this shouldn't be necessary, for we have onClose functions
 		# _.each (_.values @changeStreams), (stream) ->
