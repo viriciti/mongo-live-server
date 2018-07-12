@@ -10,7 +10,7 @@ WebSocket            = require "ws"
 { initModels } = require "./lib"
 LiveDataServer    = require "../src"
 
-WAIT_FOR_WATCH = 10
+WAIT_FOR_WATCH = 200
 models         = null
 liveDataServer = null
 mongoConnector = null
@@ -48,7 +48,9 @@ describe "LiveDataServer Test", ->
 	aclClient =
 		getChargestations: (userId, cb) ->
 			acls = _.where aclGroups, identity: userId
-			cb null, acls
+			setTimeout ->
+				cb null, acls
+			, 100
 
 	testDocs = [
 			identity:      "sakifs first station"
@@ -160,6 +162,21 @@ describe "LiveDataServer Test", ->
 					, WAIT_FOR_WATCH
 			return
 
+		it "should reject unknown route", (done) ->
+			identity            = aclGroups[0].identity
+
+			options =
+				headers:
+					"identity": identity
+
+			socket = new WebSocket "#{address}/bogus/live", options
+
+			socket
+				.once "close", (statusCode) ->
+					assert.equal statusCode, 4004, "Eh? this should be the code"
+					done()
+			return
+
 		it "should cleanup watches upon disconnect", (done) ->
 			identity            = aclGroups[0].identity
 
@@ -175,9 +192,7 @@ describe "LiveDataServer Test", ->
 					socket.close()
 
 					setTimeout ->
-						sockets = _.reduce @wsServers, (tot, server) ->
-							tot + Number server.clients.size
-						, 0
+						sockets = liveDataServer.wsServer.clients.size
 
 						streams = (_.keys liveDataServer.changeStreams).length
 
@@ -209,9 +224,7 @@ describe "LiveDataServer Test", ->
 			openAndCloseSocket false
 
 			setTimeout ->
-				sockets = _.reduce liveDataServer.wsServers, (tot, server) ->
-					tot + Number server.clients.size
-				, 0
+				sockets = liveDataServer.wsServer.clients.size
 
 				streams = (_.keys liveDataServer.changeStreams).length
 

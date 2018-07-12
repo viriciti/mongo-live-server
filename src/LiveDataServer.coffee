@@ -9,7 +9,7 @@ WebSocket            = require "ws"
 
 
 class LiveDataServer
-	constructor: ({ @options = {}, @httpServer, log, @mongoConnector, @aclClient, watches }) ->
+	constructor: ({ @options = {}, @httpServer, log, @mongoConnector, @aclClient, @watches }) ->
 		@log        = log or (require "@tn-group/log") label: "live-data-server"
 		metricLabel = (@log.label ? "live-data-server").replace /-/g, "_"
 
@@ -44,18 +44,16 @@ class LiveDataServer
 			help:       "Counts the connected sockets"
 			labelNames: [ "identity" ]
 
-		_.each watches, (watchConf) =>
-			{ path, model, blacklistFields } = watchConf
-			livePath                         = "/#{path}/live"
+		# _.each watches, (watchConf) =>
+		# 	{ path, model, blacklistFields } = watchConf
+		# 	livePath                         = "/#{path}/live"
 
-			debug "Setting up web socket server for path: #{livePath} and mongoose model: #{model}.
-			 Blacklist: #{blacklistFields?.join " "}"
+		# 	debug "Setting up web socket server for path: #{livePath} and mongoose model: #{model}.
+		# 	 Blacklist: #{blacklistFields?.join " "}"
 
-			server = new WebSocket.Server server: @httpServer, path: livePath
+		@wsServer = new WebSocket.Server server: @httpServer
 
-			server.on "connection", @_handleConnection.bind @, watchConf
-
-			@wsServers.push server
+		@wsServer.on "connection", @_handleConnection
 
 	_updateGaugeStreams: =>
 		mnt = (_.keys @changeStreams).length
@@ -65,9 +63,7 @@ class LiveDataServer
 		@gaugeStreams.set mnt
 
 	_updateGaugeSockets: =>
-		mnt = _.reduce @wsServers, (tot, server) ->
-			tot + Number server.clients.size
-		, 0
+		mnt = @wsServer.clients.size
 
 		debug "Updating amount of sockets gauge: #{mnt}"
 
@@ -139,8 +135,15 @@ class LiveDataServer
 
 			cb()
 
-	_handleConnection: (watch, socket, req) =>
-		{ identityKey, model, blacklistFields } = watch
+	_handleConnection: (socket, req) =>
+		url = req.url.split("/live").shift().slice(1)
+
+		route = _.find @watches, path: url
+
+		unless route
+			return socket.close 4004, "#{req.url} not found"
+
+		{ identityKey, model, blacklistFields } = route
 		userIdentity             = req.headers["identity"]
 		streamId                 = uuid.v4()
 		ip                       = req.connection.remoteAddress
@@ -281,9 +284,8 @@ class LiveDataServer
 		debug "live data server stop"
 
 		# Sockets do NOT close when http server.close is called
-		_.each @wsServers, (server) ->
-			server.clients.forEach (client) ->
-				client.close()
+		@wsServer.clients.forEach (client) ->
+			client.close()
 
 		# this shouldn't be necessary, for we have onClose functions
 		# _.each (_.values @changeStreams), (stream) ->
