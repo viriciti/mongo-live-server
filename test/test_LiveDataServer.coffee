@@ -175,11 +175,51 @@ describe "LiveDataServer Test", ->
 					socket.close()
 
 					setTimeout ->
-						assert.equal (_.keys liveDataServer.changeStreams).length, 0
+						sockets = _.reduce @wsServers, (tot, server) ->
+							tot + Number server.clients.size
+						, 0
+
+						streams = (_.keys liveDataServer.changeStreams).length
+
+						assert.equal sockets, 0
+						assert.equal streams, 0
 
 						done()
 					, WAIT_FOR_WATCH
 			return
+
+		it "should have 1 socket and 1 stream after multiple reconnects", (done) ->
+			identity            = aclGroups[0].identity
+
+			options =
+				headers:
+					"identity": identity
+
+			openAndCloseSocket = (close) ->
+				socket = new WebSocket "#{address}/chargestations/live", options
+
+				socket
+					.once "error", done
+					.once "open", () ->
+						socket.close() if close
+
+			_.each [0...10], ->
+				openAndCloseSocket true
+
+			openAndCloseSocket false
+
+			setTimeout ->
+				sockets = _.reduce liveDataServer.wsServers, (tot, server) ->
+					tot + Number server.clients.size
+				, 0
+
+				streams = (_.keys liveDataServer.changeStreams).length
+
+				assert.equal sockets, 1
+				assert.equal streams, 1
+
+				done()
+			, 1000
 
 		it "for all docs in querystring", (done) ->
 			identity = aclGroups[0].identity
