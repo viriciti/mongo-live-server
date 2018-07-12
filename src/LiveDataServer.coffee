@@ -203,7 +203,7 @@ class LiveDataServer
 				@log.error error if error
 
 		closeDown = =>
-			debug "Calling close down for change straem with id: #{streamId}"
+			debug "Calling close down for change stream with id: #{streamId}"
 
 			return unless @changeStreams[streamId]
 
@@ -272,6 +272,16 @@ class LiveDataServer
 
 	stop: (cb) =>
 		debug "live data server stop"
+
+		# Sockets do NOT close when http server.close is called
+		_.each @wsServers, (server) ->
+			server.clients.forEach (client) ->
+				client.close()
+
+		# this shouldn't be necessary, for we have onClose functions
+		# _.each (_.values @changeStreams), (stream) ->
+		# 	stream.removeAllListeners [ "close" ]
+		# 	stream.close()
 
 		return cb() if @unControlledHTTP
 		return cb() unless @httpServer.listening
