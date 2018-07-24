@@ -70,6 +70,8 @@ class LiveDataServer
 		@gaugeSockets.set mnt
 
 	_getAllowed: ({ ids, userIdentity, onClose }, cb) =>
+		return cb() unless @aclClient
+
 		ids = [].concat ids
 
 		@aclClient.getChargestations userIdentity, (error, acls) =>
@@ -103,7 +105,7 @@ class LiveDataServer
 			ids
 			userIdentity
 			onClose
-		}, (error, allowed) =>
+		}, (error, allowed = []) =>
 			if error
 				mssg = "Error getting allowed chargestations for #{userIdentity}: #{error}"
 				debug mssg, { userIdentity, ids, model }
@@ -113,7 +115,7 @@ class LiveDataServer
 				return cb new Error "Socket disconnected while getting ACL"
 
 			pipeline[0].$match.$and or= []
-			pipeline[0].$match.$and.push "fullDocument.#{identityKey}": $in: allowed
+			pipeline[0].$match.$and.push "fullDocument.#{identityKey}": $in: allowed if allowed.length
 
 			onError = (error) =>
 				@log.error "Change stream error: #{error}"
