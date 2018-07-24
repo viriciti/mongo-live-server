@@ -13,6 +13,8 @@ class LiveDataServer
 		@log        = log or (require "@tn-group/log") label: "live-data-server"
 		metricLabel = (@log.label ? "live-data-server").replace /-/g, "_"
 
+		@log.warn "Live Data Server running without ACl client!" unless @aclClient
+
 		debug "TN-log & prometheus metric label is: #{metricLabel}"
 
 		unless @mongoConnector
