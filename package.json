@@ -1,9 +1,11 @@
 {
-  "name": "@tn-group/cs-live-data-server",
+  "name": "mongo-live-server",
   "version": "0.0.9",
   "scripts": {
     "test": "NODE_ENV=test nyc mocha",
-    "compile": "coffee --output build --compile src"
+    "compile": "coffee --output build --compile src",
+    "test-release": "npm install; npm run compile; npm test",
+    "release": "npm install; npm run compile; npm test; npm publish"
   },
   "main": "./build/index.js",
   "files": [
@@ -11,7 +13,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "[git@git.viriciti.com:10022]:chargestations/cs-live-data-server.git"
+    "url": "git remote add origin git@github.com:viriciti/mongo-live-server.git"
   },
   "author": "pim",
   "nyc": {
@@ -29,8 +31,7 @@
     ]
   },
   "dependencies": {
-    "@tn-group/log": "^3.2.3",
-    "@tn-group/mongo-connector": "^0.1.0",
+    "mongo-changestream-connector": "^0.2.0",
     "async": "^2.6.1",
     "config": "^1.30.0",
     "debug": "^3.1.0",
