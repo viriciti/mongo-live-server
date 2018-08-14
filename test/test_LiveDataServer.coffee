@@ -3,7 +3,7 @@ assert               = require "assert"
 async                = require "async"
 config               = require "config"
 moment               = require "moment"
-MongoConnector       = require "@tn-group/mongo-connector"
+MongoConnector       = require "mongo-changestream-connector"
 qs                   = require "qs"
 WebSocket            = require "ws"
 

@@ -10,8 +10,10 @@ WebSocket            = require "ws"
 
 class LiveDataServer
 	constructor: ({ @options = {}, @httpServer, log, @mongoConnector, @aclClient, @watches }) ->
-		@log        = log or (require "@tn-group/log") label: "live-data-server"
+		@log        = log or console
 		metricLabel = (@log.label ? "live-data-server").replace /-/g, "_"
+
+		@log.warn "Live Data Server running without ACl client!" unless @aclClient
 
 		debug "TN-log & prometheus metric label is: #{metricLabel}"
 
