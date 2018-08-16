@@ -4,7 +4,7 @@
   "scripts": {
     "test": "NODE_ENV=test nyc mocha",
     "compile": "coffee --output build --compile src",
-    "test-release": "npm install; npm run compile; npm test",
+    "release-test": "npm install; npm run compile; npm test",
     "release": "npm install; npm run compile; npm test; npm publish"
   },
   "main": "./build/index.js",
@@ -15,7 +15,6 @@
     "type": "git",
     "url": "git remote add origin git@github.com:viriciti/mongo-live-server.git"
   },
-  "author": "pim",
   "nyc": {
     "lines": 80,
     "functions": 80,
@@ -35,13 +34,13 @@
     "async": "^2.6.1",
     "config": "^1.30.0",
     "debug": "^3.1.0",
-    "prom-client": "^11.1.1",
     "qs": "^6.5.2",
     "underscore": "^1.9.1",
     "uuid": "^3.3.2",
     "ws": "^5.2.1"
   },
   "devDependencies": {
+    "prom-client": "^11.1.1",
     "coffee-coverage": "^3.0.0",
     "coffee-script": "^1.12.7",
     "coffeescope2": "^0.5.1",
