@@ -2,7 +2,8 @@
   "name": "mongo-live-server",
   "version": "0.1.0",
   "scripts": {
-    "test": "NODE_ENV=test nyc mocha",
+    "test": "NODE_ENV=test nyc mocha -r coffee-script/register test/**/*.coffee -r coffee-coverage/register-istanbul --exit",
+    "tests": "NODE_ENV=test mocha -r coffee-script/register -w --watch-extensions coffee test/**/*.coffee",
     "compile": "coffee --output build --compile src",
     "release-test": "npm install; npm run compile; npm test",
     "release": "npm install; npm run compile; npm test; npm publish"
@@ -30,17 +31,18 @@
     ]
   },
   "dependencies": {
-    "mongo-changestream-connector": "^0.2.0",
     "async": "^2.6.1",
     "config": "^1.30.0",
     "debug": "^3.1.0",
+    "mongo-changestream-connector": "^0.3.0",
+    "mongoose": "^5.2.9",
     "qs": "^6.5.2",
     "underscore": "^1.9.1",
     "uuid": "^3.3.2",
+    "winston": "^3.0.0",
     "ws": "^5.2.1"
   },
   "devDependencies": {
-    "prom-client": "^11.1.1",
     "coffee-coverage": "^3.0.0",
     "coffee-script": "^1.12.7",
     "coffeescope2": "^0.5.1",

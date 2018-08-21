@@ -3,32 +3,22 @@ assert               = require "assert"
 async                = require "async"
 config               = require "config"
 moment               = require "moment"
-MongoConnector       = require "mongo-changestream-connector"
 qs                   = require "qs"
 WebSocket            = require "ws"
-{ Gauge }            = require "prom-client"
 
 { initModels } = require "./lib"
 MongoLiveServer = require "../src"
 
-WAIT_FOR_WATCH  = 200
-models          = null
-mongoLiveServer = null
-mongoConnector  = null
 
-
-describe "MongoLiveServer Test", ->
+describe "Mongo Live Server Test", ->
 	address  = "ws://localhost:#{config.port}"
+	WAIT_FOR_WATCH  = 200
+	models          = null
+	mongoLiveServer = null
+	mongoConnector  = null
 
 	process.on "unhandledRejection", (error) ->
 		console.error "unhandledRejection", error
-
-	mongoConnector = new MongoConnector
-		database:    config.db.database
-		hosts:       config.db.hosts
-		options:     config.db.options
-		poolSize:    config.db.poolSize
-		useMongoose: true
 
 	testDocs = [
 			identity:      "sakifs first station"
@@ -101,22 +91,9 @@ describe "MongoLiveServer Test", ->
 		before (done) ->
 			async.series [
 				(cb) ->
-					mongoConnector.initReplset cb
-
-				(cb) ->
-					mongoConnector.start (error) ->
-						return cb error if error
-
-						initModels mongoConnector.mongooseConnection
-
-						{ models } = mongoConnector
-
-						cb()
-
-				(cb) ->
 					mongoLiveServer = new MongoLiveServer
-						mongoConnector:   mongoConnector
-						Gauge:            Gauge
+						mongo:            config.mongo
+						# Gauge:            Gauge
 						getAllowed:       getAllowed
 						options:
 							port:         config.port
@@ -129,6 +106,13 @@ describe "MongoLiveServer Test", ->
 						]
 
 					mongoLiveServer.start cb
+
+				(cb) ->
+					initModels mongoLiveServer.mongooseConnection
+
+					{ models } = mongoLiveServer
+
+					cb()
 
 				(cb) ->
 					models.Chargestation
@@ -147,13 +131,8 @@ describe "MongoLiveServer Test", ->
 			], done
 
 		after (done) ->
-			async.series [
-				(cb) ->
-					mongoLiveServer.stop cb
+			mongoLiveServer.stop done
 
-				(cb) ->
-					mongoConnector.stop cb
-			], done
 
 		it "should create a socket connection, keep track of watches", (done) ->
 			identity            = aclGroups[0].identity

@@ -5,17 +5,19 @@ http                 = require "http"
 uuid                 = require "uuid"
 qs                   = require "qs"
 WebSocket            = require "ws"
+MongoConnector       = require "mongo-changestream-connector"
 
-{ debugLogger }      = require "./lib"
+{ defaultLogger }    = require "./lib"
 
 
-class LiveDataServer
+
+class MongoLiveServer
 	constructor: (args) ->
 		{
 			@options = {}
 			@httpServer
 			log
-			@mongoConnector
+			@mongo
 			@watches
 			Gauge
 			metricLabel
@@ -26,17 +28,19 @@ class LiveDataServer
 		@getAllowed or= ({ ids }, cb) ->
 			cb null, ids
 
-		@log        = log or debugLogger
-		metricLabel = metricLabel or (@log.label ? "mongo-live-server").replace /-/g, "_"
+		defaultLabel = "mongo-live-server"
+		@log         = log or defaultLogger defaultLabel
+		metricLabel  = metricLabel or (@log.label ? defaultLabel).replace /-/g, "_"
 
-		@log.warn "Mongo Live Server running without ACl client!" unless @aclClient
+		@log.warn "Mongo Live Server running without `getAllowed` function!" unless @getAllowed
 
 		debug "TN-log & prometheus metric label is: #{metricLabel}"
 
-		unless @mongoConnector
-			throw new Error "mongo-connector module or db options must be provided to create LiveDataServer"
+		# Config validation of @mongo happens in mongo-changestream-connector
+		unless @mongo
+			throw new Error "Mongo config must be provided to create Mongo Live Server"
 		unless (@options.port and @options.host) or @httpServer
-			throw new Error "httpServer or port & host must be provided to create LiveDataServer"
+			throw new Error "httpServer or port & host must be provided to create Mongo Live Server"
 
 		@unControlledHTTP      = Boolean @httpServer
 		@httpServer          or= http.createServer()
@@ -53,7 +57,7 @@ class LiveDataServer
 		#######################################
 
 		@gaugeStreams = if Gauge then new Gauge
-			name:       "#{metricLabel}_live_data_server_change_stream_count"
+			name:       "#{metricLabel}_change_stream_count"
 			help:       "Counts the change streams of the of the Mongo Live Server"
 			labelNames: [ "live_data_server_streams" ]
 
@@ -69,7 +73,8 @@ class LiveDataServer
 			debug "Setting up web socket server for path: #{livePath} and mongoose model: #{model}.
 			 Blacklist: #{blacklistFields?.join " "}"
 
-		@wsServer = new WebSocket.Server server: @httpServer
+		@mongoConnector = new MongoConnector _.extend {}, @mongo, log: @log
+		@wsServer       = new WebSocket.Server server: @httpServer
 
 		@wsServer.on "connection", @_handleConnection
 
@@ -268,15 +273,34 @@ class LiveDataServer
 	start: (cb) =>
 		debug "Mongo Live Server start"
 
-		return cb() if @unControlledHTTP
-		return cb() if @httpServer.listening
+		async.series [
+			(cb) =>
+				@mongoConnector.initReplset cb
 
-		@httpServer.listen port: @options.port, (error) =>
-			return cb error if error
+			(cb) =>
+				@mongoConnector.start (error) =>
+					return cb error if error
 
-			@log.info "WebSocket server listening on #{@httpServer.address().port}"
+					if @mongo.useMongoose
+						@mongooseConnection = @mongoConnector.mongooseConnection
+						@models             = @mongooseConnection.models
+					else
+						@mongoClient = @mongoConnector.mongoClient
+						@db          = @mongoConnector.db
 
-			cb()
+					cb()
+
+			(cb) =>
+				return cb() if @unControlledHTTP
+				return cb() if @httpServer.listening
+
+				@httpServer.listen port: @options.port, (error) =>
+					return cb error if error
+
+					@log.info "WebSocket server listening on #{@httpServer.address().port}"
+
+					cb()
+		], cb
 
 	stop: (cb) =>
 		debug "Mongo Live Server stop"
@@ -290,14 +314,20 @@ class LiveDataServer
 		# 	stream.removeAllListeners [ "close" ]
 		# 	stream.close()
 
-		return cb() if @unControlledHTTP
-		return cb() unless @httpServer.listening
+		async.series [
+			(cb) =>
+				@mongoConnector.stop cb
 
-		@httpServer.close (error) =>
-			return cb error if error
+			(cb) =>
+				return cb() if @unControlledHTTP
+				return cb() unless @httpServer.listening
 
-			@log.info "WebSocket server stopped listening"
+				@httpServer.close (error) =>
+					return cb error if error
 
-			cb()
+					@log.info "WebSocket server stopped listening"
 
-module.exports = LiveDataServer
+					cb()
+		], cb
+
+module.exports = MongoLiveServer
