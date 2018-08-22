@@ -92,12 +92,11 @@ describe "Mongo Live Server Test", ->
 			async.series [
 				(cb) ->
 					mongoLiveServer = new MongoLiveServer
-						mongo:            config.mongo
+						mongo:            _.extend {}, config.mongo, useMongoose: true
 						# Gauge:            Gauge
 						getAllowed:       getAllowed
-						options:
-							port:         config.port
-							host:         config.host
+						port:             config.port
+						host:             config.host
 						watches: [
 							path:             "chargestations"
 							model:            "Chargestation"
