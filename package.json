@@ -34,7 +34,7 @@
     "async": "^2.6.1",
     "config": "^1.30.0",
     "debug": "^3.1.0",
-    "mongo-changestream-connector": "^0.3.0",
+    "mongo-changestream-connector": "^1.0.0",
     "mongoose": "^5.2.9",
     "qs": "^6.5.2",
     "underscore": "^1.9.1",

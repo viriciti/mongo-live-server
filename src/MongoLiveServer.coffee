@@ -14,7 +14,8 @@ MongoConnector       = require "mongo-changestream-connector"
 class MongoLiveServer
 	constructor: (args) ->
 		{
-			@options = {}
+			@host
+			@port
 			@httpServer
 			log
 			@mongo
@@ -39,7 +40,7 @@ class MongoLiveServer
 		# Config validation of @mongo happens in mongo-changestream-connector
 		unless @mongo
 			throw new Error "Mongo config must be provided to create Mongo Live Server"
-		unless (@options.port and @options.host) or @httpServer
+		unless (@port and @host) or @httpServer
 			throw new Error "httpServer or port & host must be provided to create Mongo Live Server"
 
 		@unControlledHTTP      = Boolean @httpServer
@@ -66,12 +67,18 @@ class MongoLiveServer
 			help:       "Counts the connected sockets"
 			labelNames: [ "identity" ]
 
-		_.each @watches, (watchConf) ->
-			{ path, model, blacklistFields } = watchConf
-			livePath                         = "/#{path}/live"
+		_.each @watches, (route) =>
+			{ path, model, blacklistFields, collection } = route
+			livePath                                     = "/#{path}/live"
 
-			debug "Setting up web socket server for path: #{livePath} and mongoose model: #{model}.
-			 Blacklist: #{blacklistFields?.join " "}"
+			if @mongo.useMongoose and collection
+				throw new Error "Each watch config object should have the `model` property (and not `collection`)"
+			if not @mongo.useMongoose and model
+				throw new Error "Each watch config object should have the `collection` property (and not `model`)"
+
+			debug "Setting up web socket server for
+			 path:               #{livePath}.
+			 Blacklist:          #{blacklistFields?.join " "}"
 
 		@mongoConnector = new MongoConnector _.extend {}, @mongo, log: @log
 		@wsServer       = new WebSocket.Server server: @httpServer
@@ -101,6 +108,7 @@ class MongoLiveServer
 			identityKey = "identity"
 			ids
 			model
+			collection
 			onChange
 			onClose
 			pipeline
@@ -111,12 +119,11 @@ class MongoLiveServer
 
 		@getAllowed { ids, userIdentity	}, (error, allowed = []) =>
 			if error
-				mssg = "Error getting allowed documents for #{userIdentity}: #{error}"
-				debug mssg, { userIdentity, ids, model }
+				mssg = "Error getting allowed #{model or collection} documents for #{userIdentity}: #{error}"
 				return cb new Error mssg
 
 			if [ WebSocket.CLOSED, WebSocket.CLOSING ].includes socket.readyState
-				return cb new Error "Socket disconnected while getting ACL"
+				return cb new Error "Socket disconnected while getting allowed ids"
 
 			pipeline[0].$match.$and or= []
 			pipeline[0].$match.$and.push "fullDocument.#{identityKey}": $in: allowed if allowed.length
@@ -126,7 +133,8 @@ class MongoLiveServer
 				cursor.close()
 
 			cursor = @mongoConnector.changeStream {
-				modelName: model
+				model
+				collection
 				onError
 				onClose
 				onChange
@@ -148,7 +156,7 @@ class MongoLiveServer
 
 		return socket.close 4004, "#{req.url} not found" unless route
 
-		{ identityKey, model, blacklistFields } = route
+		{ identityKey, model, collection, blacklistFields } = route
 		userIdentity             = req.headers[@userIdentityKey] or req.query[@userIdentityKey]
 		streamId                 = uuid.v4()
 		ip                       = req.connection.remoteAddress
@@ -257,6 +265,7 @@ class MongoLiveServer
 			identityKey
 			ids
 			model
+			collection
 			onChange
 			onClose
 			pipeline
@@ -294,7 +303,7 @@ class MongoLiveServer
 				return cb() if @unControlledHTTP
 				return cb() if @httpServer.listening
 
-				@httpServer.listen port: @options.port, (error) =>
+				@httpServer.listen port: @port, (error) =>
 					return cb error if error
 
 					@log.info "WebSocket server listening on #{@httpServer.address().port}"

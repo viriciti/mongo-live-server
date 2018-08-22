@@ -3,8 +3,7 @@ module.exports =
 	port:  9999
 
 	mongo:
-		database: "test_cs_live_data_server"
-		useMongoose: true
+		database:    "test_cs_live_data_server"
 		throwHappy:  false
 		options:
 			poolSize: 50
