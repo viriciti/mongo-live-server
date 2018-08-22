@@ -1,1 +1,1 @@
-module.exports = require "./LiveDataServer"
+module.exports = require "./MongoLiveServer"

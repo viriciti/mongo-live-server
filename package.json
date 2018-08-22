@@ -1,10 +1,11 @@
 {
   "name": "mongo-live-server",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "scripts": {
-    "test": "NODE_ENV=test nyc mocha",
+    "test": "NODE_ENV=test nyc mocha -r coffee-script/register test/**/*.coffee -r coffee-coverage/register-istanbul --exit",
+    "tests": "NODE_ENV=test mocha -r coffee-script/register -w --watch-extensions coffee test/**/*.coffee",
     "compile": "coffee --output build --compile src",
-    "test-release": "npm install; npm run compile; npm test",
+    "release-test": "npm install; npm run compile; npm test",
     "release": "npm install; npm run compile; npm test; npm publish"
   },
   "main": "./build/index.js",
@@ -15,7 +16,6 @@
     "type": "git",
     "url": "git remote add origin git@github.com:viriciti/mongo-live-server.git"
   },
-  "author": "pim",
   "nyc": {
     "lines": 80,
     "functions": 80,
@@ -31,14 +31,15 @@
     ]
   },
   "dependencies": {
-    "mongo-changestream-connector": "^0.2.0",
     "async": "^2.6.1",
     "config": "^1.30.0",
     "debug": "^3.1.0",
-    "prom-client": "^11.1.1",
+    "mongo-changestream-connector": "^0.3.0",
+    "mongoose": "^5.2.9",
     "qs": "^6.5.2",
     "underscore": "^1.9.1",
     "uuid": "^3.3.2",
+    "winston": "^3.0.0",
     "ws": "^5.2.1"
   },
   "devDependencies": {

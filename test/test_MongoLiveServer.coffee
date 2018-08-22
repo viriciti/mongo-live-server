@@ -3,54 +3,22 @@ assert               = require "assert"
 async                = require "async"
 config               = require "config"
 moment               = require "moment"
-MongoConnector       = require "mongo-changestream-connector"
 qs                   = require "qs"
 WebSocket            = require "ws"
 
 { initModels } = require "./lib"
-LiveDataServer    = require "../src"
-
-WAIT_FOR_WATCH = 200
-models         = null
-liveDataServer = null
-mongoConnector = null
+MongoLiveServer = require "../src"
 
 
-describe "LiveDataServer Test", ->
+describe "Mongo Live Server Test", ->
 	address  = "ws://localhost:#{config.port}"
+	WAIT_FOR_WATCH  = 200
+	models          = null
+	mongoLiveServer = null
+	mongoConnector  = null
 
 	process.on "unhandledRejection", (error) ->
 		console.error "unhandledRejection", error
-
-	mongoConnector = new MongoConnector
-		database: config.db.database
-		hosts:    config.db.hosts
-		options:  config.db.options
-		poolSize: config.db.poolSize
-
-	aclGroups = [
-			identity:      "sakif"
-			chargestation: "sakifs first station"
-		,
-			identity:      "sakif"
-			chargestation: "sakifs second station"
-		,
-			identity:      "sakif"
-			chargestation: "read this"
-		,
-			identity:      "sakif"
-			chargestation: "hidden charge station"
-		,
-			identity:      "pim"
-			chargestation: "pims first station"
-	]
-
-	aclClient =
-		getChargestations: (userId, cb) ->
-			acls = _.where aclGroups, identity: userId
-			setTimeout ->
-				cb null, acls
-			, 100
 
 	testDocs = [
 			identity:      "sakifs first station"
@@ -66,6 +34,48 @@ describe "LiveDataServer Test", ->
 			active:        true
 	]
 
+	aclGroups = [
+				identity:      "sakif"
+				chargestation: "sakifs first station"
+			,
+				identity:      "sakif"
+				chargestation: "sakifs second station"
+			,
+				identity:      "sakif"
+				chargestation: "read this"
+			,
+				identity:      "sakif"
+				chargestation: "hidden charge station"
+			,
+				identity:      "pim"
+				chargestation: "pims first station"
+		]
+
+	aclClient =
+		getChargestations: (userId, cb) ->
+			acls = _.where aclGroups, identity: userId
+
+			setTimeout ->
+				cb null, acls
+			, 100
+
+	getAllowed = ({ ids, userIdentity }, cb) ->
+		ids = [].concat ids
+
+		aclClient.getChargestations userIdentity, (error, acls) ->
+			return console.error "Error getting allowed chargestations: #{error}" if error
+
+			allChargestations = _.pluck acls, "chargestation"
+
+			return cb null, allChargestations if ids.length is 0
+
+			diff = _.difference ids, allChargestations
+
+			if diff.length
+				return cb new Error "User attempted to subscribe to not allowed ids! #{diff.join " "}"
+
+			cb null, ids
+
 	sendJson = (data) ->
 		@send JSON.stringify data
 
@@ -79,26 +89,12 @@ describe "LiveDataServer Test", ->
 
 	describe "WebSocket mongo connect interaction test", ->
 		before (done) ->
-			@timeout 300000
-
 			async.series [
 				(cb) ->
-					mongoConnector.initReplset cb
-
-				(cb) ->
-					mongoConnector.start (error) ->
-						return cb error if error
-
-						initModels mongoConnector.connection
-
-						{ models } = mongoConnector.connection
-
-						cb()
-
-				(cb) ->
-					liveDataServer = new LiveDataServer
-						mongoConnector:   mongoConnector
-						aclClient:        aclClient
+					mongoLiveServer = new MongoLiveServer
+						mongo:            config.mongo
+						# Gauge:            Gauge
+						getAllowed:       getAllowed
 						options:
 							port:         config.port
 							host:         config.host
@@ -109,7 +105,14 @@ describe "LiveDataServer Test", ->
 							blacklistFields: ["forbiddenField"]
 						]
 
-					liveDataServer.start cb
+					mongoLiveServer.start cb
+
+				(cb) ->
+					initModels mongoLiveServer.mongooseConnection
+
+					{ models } = mongoLiveServer
+
+					cb()
 
 				(cb) ->
 					models.Chargestation
@@ -128,20 +131,15 @@ describe "LiveDataServer Test", ->
 			], done
 
 		after (done) ->
-			async.series [
-				(cb) ->
-					liveDataServer.stop cb
+			mongoLiveServer.stop done
 
-				(cb) ->
-					mongoConnector.stop cb
-			], done
 
 		it "should create a socket connection, keep track of watches", (done) ->
 			identity            = aclGroups[0].identity
 
 			options =
 				headers:
-					"identity": identity
+					"user-id": identity
 
 			socket = new WebSocket "#{address}/chargestations/live", options
 
@@ -149,12 +147,12 @@ describe "LiveDataServer Test", ->
 				.once "error", done
 				.once "open", () ->
 					setTimeout ->
-						connectionId = (_.keys liveDataServer.changeStreams)[0]
+						connectionId = (_.keys mongoLiveServer.changeStreams)[0]
 
-						assert.ok not (_.isEmpty liveDataServer.changeStreams), "added a watch"
-						assert.equal (_.keys liveDataServer.changeStreams).length, 1
+						assert.ok not (_.isEmpty mongoLiveServer.changeStreams), "added a watch"
+						assert.equal (_.keys mongoLiveServer.changeStreams).length, 1
 
-						assert.ok liveDataServer.changeStreams[connectionId], "did not add watch"
+						assert.ok mongoLiveServer.changeStreams[connectionId], "did not add watch"
 
 						socket.close()
 
@@ -167,7 +165,7 @@ describe "LiveDataServer Test", ->
 
 			options =
 				headers:
-					"identity": identity
+					"user-id": identity
 
 			socket = new WebSocket "#{address}/bogus/live", options
 
@@ -182,7 +180,7 @@ describe "LiveDataServer Test", ->
 
 			options =
 				headers:
-					"identity": identity
+					"user-id": identity
 
 			socket = new WebSocket "#{address}/chargestations/live", options
 
@@ -192,9 +190,9 @@ describe "LiveDataServer Test", ->
 					socket.close()
 
 					setTimeout ->
-						sockets = liveDataServer.wsServer.clients.size
+						sockets = mongoLiveServer.wsServer.clients.size
 
-						streams = (_.keys liveDataServer.changeStreams).length
+						streams = (_.keys mongoLiveServer.changeStreams).length
 
 						assert.equal sockets, 0
 						assert.equal streams, 0
@@ -208,7 +206,7 @@ describe "LiveDataServer Test", ->
 
 			options =
 				headers:
-					"identity": identity
+					"user-id": identity
 
 			openAndCloseSocket = (close) ->
 				socket = new WebSocket "#{address}/chargestations/live", options
@@ -224,9 +222,9 @@ describe "LiveDataServer Test", ->
 			openAndCloseSocket false
 
 			setTimeout ->
-				sockets = liveDataServer.wsServer.clients.size
+				sockets = mongoLiveServer.wsServer.clients.size
 
-				streams = (_.keys liveDataServer.changeStreams).length
+				streams = (_.keys mongoLiveServer.changeStreams).length
 
 				assert.equal sockets, 1
 				assert.equal streams, 1
@@ -239,7 +237,7 @@ describe "LiveDataServer Test", ->
 
 			options =
 				headers:
-					"identity": identity
+					"user-id": identity
 
 			query = qs.stringify
 				ids:       [testDocs[0].identity]
@@ -261,7 +259,6 @@ describe "LiveDataServer Test", ->
 					done()
 				, 500
 
-
 			databaseFlow = ->
 				update  = $set: lastHeartbeat: moment().toISOString()
 				where1  = identity: testDocs[1].identity
@@ -271,7 +268,6 @@ describe "LiveDataServer Test", ->
 					.findOneAndUpdate where1, update
 					.exec (error) ->
 						return done error if error
-
 						models.Chargestation
 							.findOneAndUpdate where0, update
 							.exec (error) ->
@@ -282,7 +278,6 @@ describe "LiveDataServer Test", ->
 				.once "open", () ->
 
 					setTimeout ->
-
 						databaseFlow()
 
 					, WAIT_FOR_WATCH
@@ -293,9 +288,9 @@ describe "LiveDataServer Test", ->
 
 			options =
 				headers:
-					"identity": identity
+					"user-id": identity
 
-			query = qs.stringify extension: ["identity"]
+			query = qs.stringify extension: ["user-id"]
 
 			path = "#{address}/chargestations/live?#{query}"
 
@@ -332,7 +327,7 @@ describe "LiveDataServer Test", ->
 
 			options =
 				headers:
-					"identity": identity
+					"user-id": identity
 
 			query = qs.stringify
 				subscribe: ["insert"]

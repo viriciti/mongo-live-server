@@ -1,26 +1,46 @@
 _                    = require "underscore"
-{ Gauge }            = require "prom-client"
 async                = require "async"
-debug                = (require "debug") "cs-live-data-server"
+debug                = (require "debug") "mongo-live-server"
 http                 = require "http"
 uuid                 = require "uuid"
 qs                   = require "qs"
 WebSocket            = require "ws"
+MongoConnector       = require "mongo-changestream-connector"
+
+{ defaultLogger }    = require "./lib"
 
 
-class LiveDataServer
-	constructor: ({ @options = {}, @httpServer, log, @mongoConnector, @aclClient, @watches }) ->
-		@log        = log or console
-		metricLabel = (@log.label ? "live-data-server").replace /-/g, "_"
 
-		@log.warn "Live Data Server running without ACl client!" unless @aclClient
+class MongoLiveServer
+	constructor: (args) ->
+		{
+			@options = {}
+			@httpServer
+			log
+			@mongo
+			@watches
+			Gauge
+			metricLabel
+			@getAllowed
+			@userIdentityKey = "user-id"
+		} = args
+
+		@getAllowed or= ({ ids }, cb) ->
+			cb null, ids
+
+		defaultLabel = "mongo-live-server"
+		@log         = log or defaultLogger defaultLabel
+		metricLabel  = metricLabel or (@log.label ? defaultLabel).replace /-/g, "_"
+
+		@log.warn "Mongo Live Server running without `getAllowed` function!" unless @getAllowed
 
 		debug "TN-log & prometheus metric label is: #{metricLabel}"
 
-		unless @mongoConnector
-			throw new Error "mongo-connector module or db options must be provided to create LiveDataServer"
+		# Config validation of @mongo happens in mongo-changestream-connector
+		unless @mongo
+			throw new Error "Mongo config must be provided to create Mongo Live Server"
 		unless (@options.port and @options.host) or @httpServer
-			throw new Error "httpServer or port & host must be provided to create LiveDataServer"
+			throw new Error "httpServer or port & host must be provided to create Mongo Live Server"
 
 		@unControlledHTTP      = Boolean @httpServer
 		@httpServer          or= http.createServer()
@@ -36,12 +56,12 @@ class LiveDataServer
 		# Value of gauge streams and of gauge sockets should be identical!
 		#######################################
 
-		@gaugeStreams = new Gauge
-			name:       "#{metricLabel}_live_data_server_change_stream_count"
-			help:       "Counts the change streams of the of the live data server"
+		@gaugeStreams = if Gauge then new Gauge
+			name:       "#{metricLabel}_change_stream_count"
+			help:       "Counts the change streams of the of the Mongo Live Server"
 			labelNames: [ "live_data_server_streams" ]
 
-		@gaugeSockets = new Gauge
+		@gaugeSockets = if Gauge then new Gauge
 			name:       "#{metricLabel}_active_socket_count"
 			help:       "Counts the connected sockets"
 			labelNames: [ "identity" ]
@@ -53,12 +73,15 @@ class LiveDataServer
 			debug "Setting up web socket server for path: #{livePath} and mongoose model: #{model}.
 			 Blacklist: #{blacklistFields?.join " "}"
 
-		@wsServer = new WebSocket.Server server: @httpServer
+		@mongoConnector = new MongoConnector _.extend {}, @mongo, log: @log
+		@wsServer       = new WebSocket.Server server: @httpServer
 
 		@wsServer.on "connection", @_handleConnection
 
 	_updateGaugeStreams: =>
 		mnt = (_.keys @changeStreams).length
+
+		return unless @gaugeStreams
 
 		debug "Updating amount of streams gauge: #{mnt}"
 
@@ -67,49 +90,28 @@ class LiveDataServer
 	_updateGaugeSockets: =>
 		mnt = @wsServer.clients.size
 
+		return unless @gaugeSockets
+
 		debug "Updating amount of sockets gauge: #{mnt}"
 
 		@gaugeSockets.set mnt
 
-	_getAllowed: ({ ids, userIdentity, onClose }, cb) =>
-		return cb() unless @aclClient
-
-		ids = [].concat ids
-
-		@aclClient.getChargestations userIdentity, (error, acls) =>
-			return @log.error "Error getting allowed chargestations: #{error}" if error
-
-			allChargestations = _.pluck acls, "chargestation"
-
-			return cb null, allChargestations if ids.length is 0
-
-			diff = _.difference ids, allChargestations
-
-			if diff.length
-				return cb new Error "User attempted to subscribe to not allowed ids! #{diff.join " "}"
-
-			cb null, ids
-
 	_setupStream: (payload, cb) =>
 		{
-			onChange
-			onClose
-			streamId
-			identityKey = "chargestation"
+			identityKey = "identity"
 			ids
 			model
+			onChange
+			onClose
 			pipeline
-			userIdentity
 			socket
+			streamId
+			userIdentity
 		} = payload
 
-		@_getAllowed {
-			ids
-			userIdentity
-			onClose
-		}, (error, allowed = []) =>
+		@getAllowed { ids, userIdentity	}, (error, allowed = []) =>
 			if error
-				mssg = "Error getting allowed chargestations for #{userIdentity}: #{error}"
+				mssg = "Error getting allowed documents for #{userIdentity}: #{error}"
 				debug mssg, { userIdentity, ids, model }
 				return cb new Error mssg
 
@@ -144,11 +146,10 @@ class LiveDataServer
 
 		route = _.find @watches, path: url
 
-		unless route
-			return socket.close 4004, "#{req.url} not found"
+		return socket.close 4004, "#{req.url} not found" unless route
 
 		{ identityKey, model, blacklistFields } = route
-		userIdentity             = req.headers["identity"]
+		userIdentity             = req.headers[@userIdentityKey] or req.query[@userIdentityKey]
 		streamId                 = uuid.v4()
 		ip                       = req.connection.remoteAddress
 		splitUrl                 = req.url.split "?"
@@ -162,8 +163,8 @@ class LiveDataServer
 
 		extension       = [ extension ]       if typeof extension is "string"
 		subscribe       = [ subscribe ]       if typeof subscribe is "string"
-		fields          = [ fields ]          if typeof fields is "string"
-		ids             = [ ids ]             if typeof ids is "string"
+		fields          = [ fields ]          if typeof fields    is "string"
+		ids             = [ ids ]             if typeof ids       is "string"
 
 		pipeline = [
 			$match:
@@ -213,7 +214,7 @@ class LiveDataServer
 			socket.send (JSON.stringify "#{operationType}": data), (error) =>
 				@log.error error if error
 
-		closeDown = =>
+		onClose = =>
 			debug "Calling close down for change stream with id: #{streamId}"
 
 			return unless @changeStreams[streamId]
@@ -228,19 +229,19 @@ class LiveDataServer
 			@_updateGaugeStreams()
 
 		@log.info "Client connected", {
-			url
-			ip
 			extension
-			ids
 			fields
+			ids
+			ip
 			subscribe
+			url
 			userIdentity
 		}
 
 		handleSocketDisconnect = =>
 			@log.info "client `#{userIdentity}` disconnects. connection id: #{streamId}"
 
-			closeDown()
+			onClose()
 
 			@_updateGaugeSockets()
 
@@ -253,41 +254,56 @@ class LiveDataServer
 			.once "error", handleSocketError
 
 		@_setupStream {
-			onClose: closeDown
-			ids
-			extension
-			fields
 			identityKey
-			subscribe
-			pipeline
+			ids
 			model
-			pipeline
-			userIdentity
-			streamId
 			onChange
+			onClose
+			pipeline
 			socket
+			streamId
+			userIdentity
 		}, (error) =>
 			if error
 				@log.error error.message
-				return closeDown()
+				return onClose()
 
 			@_updateGaugeSockets()
 
 	start: (cb) =>
-		debug "live data server start"
+		debug "Mongo Live Server start"
 
-		return cb() if @unControlledHTTP
-		return cb() if @httpServer.listening
+		async.series [
+			(cb) =>
+				@mongoConnector.initReplset cb
 
-		@httpServer.listen port: @options.port, (error) =>
-			return cb error if error
+			(cb) =>
+				@mongoConnector.start (error) =>
+					return cb error if error
 
-			@log.info "WebSocket server listening on #{@httpServer.address().port}"
+					if @mongo.useMongoose
+						@mongooseConnection = @mongoConnector.mongooseConnection
+						@models             = @mongooseConnection.models
+					else
+						@mongoClient = @mongoConnector.mongoClient
+						@db          = @mongoConnector.db
 
-			cb()
+					cb()
+
+			(cb) =>
+				return cb() if @unControlledHTTP
+				return cb() if @httpServer.listening
+
+				@httpServer.listen port: @options.port, (error) =>
+					return cb error if error
+
+					@log.info "WebSocket server listening on #{@httpServer.address().port}"
+
+					cb()
+		], cb
 
 	stop: (cb) =>
-		debug "live data server stop"
+		debug "Mongo Live Server stop"
 
 		# Sockets do NOT close when http server.close is called
 		@wsServer.clients.forEach (client) ->
@@ -298,14 +314,20 @@ class LiveDataServer
 		# 	stream.removeAllListeners [ "close" ]
 		# 	stream.close()
 
-		return cb() if @unControlledHTTP
-		return cb() unless @httpServer.listening
+		async.series [
+			(cb) =>
+				@mongoConnector.stop cb
 
-		@httpServer.close (error) =>
-			return cb error if error
+			(cb) =>
+				return cb() if @unControlledHTTP
+				return cb() unless @httpServer.listening
 
-			@log.info "WebSocket server stopped listening"
+				@httpServer.close (error) =>
+					return cb error if error
 
-			cb()
+					@log.info "WebSocket server stopped listening"
 
-module.exports = LiveDataServer
+					cb()
+		], cb
+
+module.exports = MongoLiveServer

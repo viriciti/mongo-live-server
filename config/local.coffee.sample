@@ -1,0 +1,6 @@
+module.exports =
+	mongo:
+		hosts: [
+			host: "localhost"
+			port: 27017
+		]
