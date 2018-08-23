@@ -20,16 +20,87 @@ yarn add mongo-live-server
 ```
 
 ## How to use
+```
+async                          = require "async"
+MongoLiveServer                = require "mongo-live-server"
+manyPeople                     = require "random-people"
+
+
+getAllowed = ({ ids, userIdentity }, cb) ->
+	if userIdentity is "tamme thijs"
+		return cb null, [ "admin" ]
+
+	cb null, [ "user", "designer" ]
+
+
+mongoLiveServer = new MongoLiveServer
+	port:       7777
+	mongo:
+		database:        "mongo-live-server-example"
+		throwHappy:       true
+		options:
+			poolSize:     50
+			replicaSet:  "rs0"
+		hosts: [
+			host: "localhost"
+			port: 27017
+		]
+	watches: [
+		path:             "persons"
+		collection:       "persons"
+		identityKey:      "role"
+		blacklistFields: ["bankAcct"]
+	]
+	getAllowed:           getAllowed
+
+module.exports = class App
+	constructor: ->
+
+	start: (cb) ->
+		mongoLiveServer.start (error) =>
+			return cb error if error
+
+			cb()
+
+			@collection = mongoLiveServer.mongoConnector.db.collection "persons"
+
+			@createPeople()
+
+	createPeople: =>
+		@interval = setInterval @createPerson, 3000
+
+	createPerson: =>
+		people = manyPeople 3
+
+		people[0].role = "admin"
+		people[1].role = "user"
+		people[2].role = "designer"
+
+		@collection.insert people, (error) ->
+			console.error error if error
+
+			console.log "Added #{people[0]["first name"]} & #{people[1]["first name"]} & #{people[2]["first name"]}"
+
+	stop: (cb) =>
+		clearInterval @interval
+		mongoLiveServer.stop cb
+```
+
 
 ### Convenience variables:
 
-if @mongo.useMongoose
-	@mongooseConnection = @mongoConnector.mongooseConnection
-	@models             = @mongooseConnection.models
-else
-	@mongoClient = @mongoConnector.mongoClient
-	@db          = @mongoConnector.db
+if `useMongoose` is true:
 
+```
+	mongoLiveServer.mongooseConnection
+	mongoLiveServer.models
+```
+
+if not:
+```
+	mongoLiveServer.mongoClient
+	mongoLiveServer.db
+```
 
 ## How to contribute
 
