@@ -96,7 +96,6 @@ describe "Mongo Live Server Test", ->
 						# Gauge:            Gauge
 						getAllowed:       getAllowed
 						port:             config.port
-						host:             config.host
 						watches: [
 							path:             "chargestations"
 							model:            "Chargestation"

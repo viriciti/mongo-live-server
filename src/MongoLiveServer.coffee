@@ -14,7 +14,6 @@ MongoConnector       = require "mongo-changestream-connector"
 class MongoLiveServer
 	constructor: (args) ->
 		{
-			@host
 			@port
 			@httpServer
 			log
@@ -40,8 +39,8 @@ class MongoLiveServer
 		# Config validation of @mongo happens in mongo-changestream-connector
 		unless @mongo
 			throw new Error "Mongo config must be provided to create Mongo Live Server"
-		unless (@port and @host) or @httpServer
-			throw new Error "httpServer or port & host must be provided to create Mongo Live Server"
+		unless @port or @httpServer
+			throw new Error "httpServer or port must be provided to create Mongo Live Server"
 
 		@unControlledHTTP      = Boolean @httpServer
 		@httpServer          or= http.createServer()
@@ -67,8 +66,13 @@ class MongoLiveServer
 			help:       "Counts the connected sockets"
 			labelNames: [ "identity" ]
 
+		throw new Error "Should provide at least one watch configuration." unless @watches.length >= 1
+
 		_.each @watches, (route) =>
-			{ path, model, blacklistFields, collection } = route
+			{ path, model, collection, blacklistFields } = route
+
+			throw new Error "Watch configuration should have a path." unless path
+
 			livePath                                     = "/#{path}/live"
 
 			if @mongo.useMongoose and collection
@@ -76,9 +80,7 @@ class MongoLiveServer
 			if not @mongo.useMongoose and model
 				throw new Error "Each watch config object should have the `collection` property (and not `model`)"
 
-			debug "Setting up web socket server for
-			 path:               #{livePath}.
-			 Blacklist:          #{blacklistFields?.join " "}"
+			debug "Setting up web socket server for path: #{livePath}. Blacklist: #{blacklistFields?.join " "}"
 
 		@mongoConnector = new MongoConnector _.extend {}, @mongo, log: @log
 		@wsServer       = new WebSocket.Server server: @httpServer
@@ -157,7 +159,8 @@ class MongoLiveServer
 		return socket.close 4004, "#{req.url} not found" unless route
 
 		{ identityKey, model, collection, blacklistFields } = route
-		userIdentity             = req.headers[@userIdentityKey] or req.query[@userIdentityKey]
+
+		userIdentity             = req.headers?[@userIdentityKey] or req.query?[@userIdentityKey]
 		streamId                 = uuid.v4()
 		ip                       = req.connection.remoteAddress
 		splitUrl                 = req.url.split "?"
