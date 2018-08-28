@@ -66,8 +66,13 @@ class MongoLiveServer
 			help:       "Counts the connected sockets"
 			labelNames: [ "identity" ]
 
+		throw new Error "Should provide at least one watch configuration." unless @watches.length >= 1
+
 		_.each @watches, (route) =>
-			{ path, model, blacklistFields, collection } = route
+			{ path, model, collection, blacklistFields } = route
+
+			throw new Error "Watch configuration should have a path." unless path
+
 			livePath                                     = "/#{path}/live"
 
 			if @mongo.useMongoose and collection
@@ -154,6 +159,7 @@ class MongoLiveServer
 		return socket.close 4004, "#{req.url} not found" unless route
 
 		{ identityKey, model, collection, blacklistFields } = route
+
 		userIdentity             = req.headers?[@userIdentityKey] or req.query?[@userIdentityKey]
 		streamId                 = uuid.v4()
 		ip                       = req.connection.remoteAddress
