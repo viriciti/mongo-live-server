@@ -6,7 +6,6 @@ Mongo Live Server serves live data from MongoDB over a websocket with just one s
 
 Mongo Live Server combines the following well-known modules:
 - [MongoDB](https://www.npmjs.com/package/mongodb): The official MongoDB driver for Node.js.
-- [Express](https://www.npmjs.com/package/express): Fast, unopinionated, minimalist web framework for Node.js.
 - [WS](https://www.npmjs.com/package/ws): Simple, blazing fast, and thoroughly tested WebSocket server implementation.
 
 At the same time, Mongo Live Server aims to provide full access to all functionalities of these dependencies.
@@ -14,7 +13,7 @@ At the same time, Mongo Live Server aims to provide full access to all functiona
 Optionally, Mongo Live Server can also be used in combination with [Mongoose](https://www.npmjs.com/package/mongoose), a MongoDB object modeling tool, mainly for writing database models. With one single setting Mongo Live Server can start up with either MongoDB connections or Mongoose connections, respectively relying on MongoDB collections or Mongoose models.
 
 ## Inspired by
-We highly recommend using Express [Express Restify Mongoose](https://www.npmjs.com/package/express-restify-mongoose) for creating database services with RESTful API's in a similar fashion.
+We highly recommend using [Express Restify Mongoose](https://www.npmjs.com/package/express-restify-mongoose) for creating database services with RESTful API's in a similar fashion. Easy to understand. Quick and painless.
 
 Moreover, Mongo Live Server is the Express Restify Mongoose for live data!
 
@@ -60,25 +59,34 @@ config =
 	# Which MongoDB collections / Mongoose models should updates be served from?
 	# Needs at least one item.
 	watches: [
-		# path (required). Serve data for this collection/model over a socket connection on ws://[host][:port]/[path]/live
+		# path (required).
+		# Serve data for this collection/model over a socket connection
+		# Address is ws://[host][:port]/[path]/live
 		path:             "pets"
 
-		# collection/model (required). Serve data for this collection or model, depending on `useMongoose` setting.
+		# collection/model (required).
+		# Serve data for this MongoDB collection or Mongoose model.
+		# either
 		collection:       "pets"
+		# or
+		model:            "Pet"
 
 		# identityKey (optional). Default: "identity"
-		# The field that is used for ACL in the aggregation pipeline of the change stream. (see `getAllowed`)
+		# The field that is used for ACL in the aggregation pipeline of the change stream.
+		# see `getAllowed`
 		identityKey:      "identity"
 
 		# Non-readable fields. (optional)
 		blacklistFields: ["bankAcct"]
 	]
 
-	# Header name or query parameter for sending along user id (optional). Default: "user-id"
+	# Header name or query parameter for sending along user id (optional).
+	# Default: "user-id"
 	userIdentityKey: "user-id"
 
 	# Asynchronous function for filtering requested ids (optional)
-	# Depending on `identityKey`, `ids` array can be a unique field like "identity" or shared field like "role".
+	# `ids` array can be a unique field like "identity" or shared field like "role".
+	# This depends on `identityKey`
 	# Example:
 	getAllowed: ({ ids, userIdentity }, cb) ->
 
@@ -123,6 +131,8 @@ JSON messages received over the socket will, after parsing, be namespaced based 
 	}
 }
 ```
+
+Messages for the `insert` operation result in full documents. Messages for the `update` operation only contain the changed fields. Messags for the `delete` operation only contain the `_id` field.
 
 ### Querying
 
@@ -211,7 +221,9 @@ Server = class Server
 		@collection.insert people, (error) ->
 			console.error error if error
 
-			console.log "Added #{people[0]["first name"]} & #{people[1]["first name"]} & #{people[2]["first name"]}"
+			console.log "Added #{people[0]["first name"]}
+			 & #{people[1]["first name"]}
+			 & #{people[2]["first name"]}"
 
 	stop: (cb) =>
 		clearInterval @interval
