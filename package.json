@@ -1,6 +1,6 @@
 {
   "name": "mongo-live-server",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "scripts": {
     "test": "NODE_ENV=test nyc mocha -r coffee-script/register test/**/*.coffee -r coffee-coverage/register-istanbul --exit",
     "tests": "NODE_ENV=test mocha -r coffee-script/register -w --watch-extensions coffee test/**/*.coffee",
@@ -8,6 +8,18 @@
     "release-test": "npm install; npm run compile; npm test",
     "release": "npm install; npm run compile; npm test; npm publish"
   },
+  "description": "Live data from MongoDB or even Mongoose over a websocket with just one simple configuration.",
+  "keywords": [
+    "mongodb",
+    "mongoose",
+    "ws",
+    "live data",
+    "websocket",
+    "streams",
+    "changestreams",
+    "express",
+    "microservices"
+  ],
   "main": "./build/index.js",
   "files": [
     "build"
