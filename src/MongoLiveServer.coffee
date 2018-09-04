@@ -287,6 +287,8 @@ class MongoLiveServer
 
 		async.series [
 			(cb) =>
+				return cb() unless @mongo.initReplset
+
 				@mongoConnector.initReplset cb
 
 			(cb) =>

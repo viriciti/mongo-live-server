@@ -10,7 +10,7 @@ Mongo Live Server combines the following well-known modules:
 
 At the same time, Mongo Live Server aims to provide full access to all functionalities of these dependencies.
 
-Optionally, Mongo Live Server can also be used in combination with [Mongoose](https://www.npmjs.com/package/mongoose), a MongoDB object modeling tool, mainly for writing database models. With one single setting Mongo Live Server can start up with either MongoDB connections or Mongoose connections, respectively relying on MongoDB collections or Mongoose models.
+Optionally, Mongo Live Server can also be used in combination with [Mongoose](https://www.npmjs.com/package/mongoose), a MongoDB object modeling tool, mainly for writing database models. With one single setting Mongo Live Server can start up with either MongoDB connections or Mongoose connections, respectively relying on MongoDB collections or Mongoose models. To do so, set `useMongoose` setting to true and run `npm i mongoose` in your project.
 
 ## Inspired by
 We highly recommend using [Express Restify Mongoose](https://www.npmjs.com/package/express-restify-mongoose) for creating database services with RESTful API's in a similar fashion. Easy to understand. Quick and painless.
@@ -38,6 +38,9 @@ config =
 
 		# Whether to throw errors on mongo connection problems (optional). Default: false
 		throwHappy:       true
+
+		# Use this to let the module init a replicaset automatically on startup
+		initReplset: true
 
 		# MongoDB (or Mongoose) connection options
 		options:
