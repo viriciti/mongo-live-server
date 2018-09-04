@@ -3,6 +3,7 @@ module.exports =
 
 	mongo:
 		database:    "test_cs_live_data_server"
+		initReplset: true
 		throwHappy:  true
 		options:
 			poolSize: 50
