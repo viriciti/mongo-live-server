@@ -283,7 +283,7 @@ class MongoLiveServer
 			@_updateGaugeSockets()
 
 	start: (cb) =>
-		debug "Mongo Live Server start"
+		debug "Mongo Live Server starting"
 
 		async.series [
 			(cb) =>
@@ -314,10 +314,12 @@ class MongoLiveServer
 					@log.info "WebSocket server listening on #{@httpServer.address().port}"
 
 					cb()
-		], cb
+		
+		], (error) ->
+			cb? error
 
 	stop: (cb) =>
-		debug "Mongo Live Server stop"
+		debug "Mongo Live Server stopping"
 
 		# Sockets do NOT close when http server.close is called
 		@wsServer.clients.forEach (client) ->
@@ -342,6 +344,7 @@ class MongoLiveServer
 					@log.info "WebSocket server stopped listening"
 
 					cb()
-		], cb
+		], (error) ->
+			cb? error
 
 module.exports = MongoLiveServer

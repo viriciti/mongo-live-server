@@ -88,6 +88,8 @@ describe "Mongo Live Server Test", ->
 		message
 
 	describe "WebSocket mongo connect interaction test", ->
+		@timeout 12 * 1000
+ 
 		before (done) ->
 			async.series [
 				(cb) ->

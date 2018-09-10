@@ -2,7 +2,7 @@
 
 ## Description
 
-Mongo Live Server serves live data from MongoDB over a websocket with just one simple configuration. Operations in MongoDB are served directly over an websocket API in a read-only fashion using the new [MongoDB Change Streams](https://docs.mongodb.com/manual/changeStreams/). So, use Mongo Live Server if you have a service that writes to a MongoDB database and you're in need of a service that reads those updates. Instead writing full microservices using the same (kind of) code over and over again, just use this module and contribute to it. Why reinvent the wheel? Moreover, using this one module across multiple services provides API consistency; very convenient!
+Mongo Live Server serves live data from MongoDB over a websocket with just one simple configuration of less then 15 lines. Operations in MongoDB are served directly from a [replica set oplog](https://docs.mongodb.com/manual/core/replica-set-oplog/) over an websocket API in a read-only fashion using the new [MongoDB Change Streams](https://docs.mongodb.com/manual/changeStreams/). So, if you have a service that writes to a MongoDB database and you're in need of a service that reads those updates, Mongo Live Server is a simple and elegant solution! Instead of writing complete microservices using boilerplate code over and over again, use one module instead. Why reinvent the wheel? Also, using Mongo Live Server across multiple services provides API consistency; very convenient!
 
 Mongo Live Server combines the following well-known modules:
 - [MongoDB](https://www.npmjs.com/package/mongodb): The official MongoDB driver for Node.js.
@@ -104,15 +104,56 @@ config =
 
 ### Start and stop
 
+For convenience sake and testing purposes, Mongo Live Server has start and stop functions. Both can be called synchronously ánd asynchronously, with or without a callback that is.
+
+Moreover, if the `initReplset` setting is enabled, starting up Mongo Live Server will automatically initialise a replica set for the database on the provided host(s) and port(s). Obviously, this is not recommended in production.
+
+```coffee
+mongoLiveServer.start() # synchronous
+
+mongoLiveServer.start (error) =>
+	return cb error if error
+
+	console.log "Mongo Live Server has successfully started!"
+
+```
+
+```coffee
+mongoLiveServer.stop() # synchronous
+
+mongoLiveServer.stop (error) =>
+	return cb error if error
+
+	console.log "Mongo Live Server has successfully stopped!"
+
+```
+
 ### Convenience variables:
 
-Use the Mongo Live Server to access the database. The variable `mongoLiveServer.db` is a reference to the currert connected database, specified in `config.mongo.database`. Use `mongoLiveServer.db` can be used for example to open collections and write documents with native MongoDB functions, e.g.:
-`mongoLiveServer.db.collection("mycollection").insert`.
-Use `mongoLiveServer.mongoClient` to get the connected native MongoDB Client.
+Use the Mongo Live Server to access the database. The variable `mongoLiveServer.db` is a reference to the currert connected database, specified in `config.mongo.database`. The variable `mongoLiveServer.db` can be used for example to open collections and write documents with native MongoDB functions, like:
 
-When using Mongoose and thus `useMongoose` is true, `mongoLiveServer.mongooseConnection` is the connection created with `mongoose.createConnection`. Use it to instantiate Mongoose models in the ordinary way, like so:
-`mongoLiveServer.mongooseConnection.model("MyCollection", new Schema({ name: String }))`.
-Once that is done, use `mongoLiveServer.models` to access those models, e.g. like `mongoLiveServer.models.MyCollection`
+```coffee
+mongoLiveServer.db.collection("mycollection").insert
+```
+
+The connected native MongoDB Client can be found here" `mongoLiveServer.mongoClient`.
+
+When using Mongoose and thus `useMongoose` is true, `mongoLiveServer.mongooseConnection` is the connection created with `mongoose.createConnection`. Use it to instantiate Mongoose models in the ordinary way, for example like this:
+
+```coffee
+schema = new Schema({ name: String })
+
+connection = mongoLiveServer.mongooseConnection
+
+connection.model("MyCollection", schema)
+
+```
+
+Once that is done, use `mongoLiveServer.models` to access the instantiated models, for example like:
+
+```coffee
+mongoLiveServer.models.MyCollection
+```
 
 
 ### Connecting
@@ -162,8 +203,8 @@ qs.stringify
 	ids:           []
 ```
 
-### Examples
-#### Server
+### Server Example
+
 ```coffee
 _                              = require "underscore"
 async                          = require "async"
@@ -254,7 +295,8 @@ process.on "unhandledRejection", (error) ->
 	console.error "unhandledRejection", error
 ```
 
-#### Client
+#### Client Example
+
 ```coffee
 qs                   = require "qs"
 WebSocket            = require "ws"
