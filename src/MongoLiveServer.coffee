@@ -214,8 +214,14 @@ class MongoLiveServer
 						data = change.fullDocument
 
 				when "update"
+					if fields.length
+						update = _.pick change.updateDescription.updatedFields, fields
+					else
+						update = change.updateDescription.updatedFields
+
 					extra = _.pick change.fullDocument, extension
-					data  = _.extend {}, change.updateDescription.updatedFields, extra
+
+					data  = _.extend {}, update, extra
 
 				else
 					throw new Error "Recieved unknown operation type! --> #{operationType}"
@@ -314,7 +320,7 @@ class MongoLiveServer
 					@log.info "WebSocket server listening on #{@httpServer.address().port}"
 
 					cb()
-		
+
 		], (error) ->
 			cb? error
 
