@@ -1,6 +1,8 @@
 {
   "name": "mongo-live-server",
-  "version": "1.2.1",
+  "version": "1.3.0",
+  "license": "MIT",
+  "homepage": "https://github.com/viriciti/mongo-live-server",
   "scripts": {
     "test": "NODE_ENV=test nyc mocha -r coffeescript/register test/**/*.coffee -r coffee-coverage/register-istanbul --exit",
     "tests": "NODE_ENV=test mocha -r coffeescript/register -w --watch-extensions coffee test/**/*.coffee",
