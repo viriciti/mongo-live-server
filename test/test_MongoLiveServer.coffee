@@ -59,10 +59,10 @@ describe "Mongo Live Server Test", ->
 				cb null, acls
 			, 100
 
-	getAllowed = ({ ids, userIdentity }, cb) ->
+	getAllowed = ({ ids, aclHeaders }, cb) ->
 		ids = [].concat ids
 
-		aclClient.getChargestations userIdentity, (error, acls) ->
+		aclClient.getChargestations aclHeaders["user-id"], (error, acls) ->
 			return console.error "Error getting allowed chargestations: #{error}" if error
 
 			allChargestations = _.pluck acls, "chargestation"
@@ -89,7 +89,7 @@ describe "Mongo Live Server Test", ->
 
 	describe "WebSocket mongo connect interaction test", ->
 		@timeout 12 * 1000
- 
+
 		before (done) ->
 			async.series [
 				(cb) ->

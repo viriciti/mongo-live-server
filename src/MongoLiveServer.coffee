@@ -22,10 +22,14 @@ class MongoLiveServer
 			Gauge
 			metricLabel
 			@getAllowed
-			@userIdentityKey = "user-id"
+			@aclHeaders = [
+				"user-id"
+				"company-id"
+			]
 		} = args
 
-		@getAllowed or= ({ ids }, cb) ->
+		@getAllowed or= ({ ids, aclHeaders }, cb) ->
+			debug "Received ACL Headers but discarding them. ACl headers:", aclHeaders
 			cb null, ids
 
 		defaultLabel = "mongo-live-server"
@@ -116,12 +120,12 @@ class MongoLiveServer
 			pipeline
 			socket
 			streamId
-			userIdentity
+			aclHeaders
 		} = payload
 
-		@getAllowed { ids, userIdentity	}, (error, allowed = []) =>
+		@getAllowed { ids, aclHeaders }, (error, allowed = []) =>
 			if error
-				mssg = "Error getting allowed #{model or collection} documents for #{userIdentity}: #{error}"
+				mssg = "Error getting allowed `#{model or collection}` documents: #{error}"
 				return cb new Error mssg
 
 			if [ WebSocket.CLOSED, WebSocket.CLOSING ].includes socket.readyState
@@ -160,7 +164,7 @@ class MongoLiveServer
 
 		{ identityKey, model, collection, blacklistFields } = route
 
-		userIdentity             = req.headers?[@userIdentityKey] or req.query?[@userIdentityKey]
+		aclHeaders               = _.pick req.headers, @aclHeaders
 		streamId                 = uuid.v4()
 		ip                       = req.connection.remoteAddress
 		splitUrl                 = req.url.split "?"
@@ -202,7 +206,8 @@ class MongoLiveServer
 		# 		connectors: 1
 
 		onChange = (change) ->
-			return unless socket.readyState is WebSocket.OPEN
+			unless socket.readyState is WebSocket.OPEN
+				return @log.error "Socket not open"
 
 			{ operationType } = change
 
@@ -245,18 +250,18 @@ class MongoLiveServer
 
 			@_updateGaugeStreams()
 
-		@log.info "Client connected", {
+		@log.info "Client connects. Connection id: #{streamId}.", {
 			extension
 			fields
 			ids
 			ip
 			subscribe
 			url
-			userIdentity
+			aclHeaders
 		}
 
 		handleSocketDisconnect = =>
-			@log.info "client `#{userIdentity}` disconnects. connection id: #{streamId}"
+			@log.info "Client disconnects. Connection id: #{streamId}"
 
 			onClose()
 
@@ -280,7 +285,7 @@ class MongoLiveServer
 			pipeline
 			socket
 			streamId
-			userIdentity
+			aclHeaders
 		}, (error) =>
 			if error
 				@log.error error.message
