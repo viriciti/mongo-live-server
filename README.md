@@ -328,8 +328,9 @@ Create an issue or a pull request.
 
 ### Release
 
+- Login with the right NPM account
 - Run `npm run release-test` to make sure that everything is ready and correct for publication on NPM.
-- If the previous step succeeded, release a new master version with a raised version tag following the git flow standard.
+- If the previous step succeeded, release a new master version with a raised version tag following the Git flow method.
 - Run `npm run release` to finally publish the module on NPM.
 
 ## How to test
