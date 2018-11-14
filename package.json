@@ -53,7 +53,7 @@
     "config": "^2.0.1",
     "debug": "^3.1.0",
     "dot-object": "^1.7.1",
-    "mongo-changestream-connector": "^1.2.2",
+    "mongo-changestream-connector": "^1.2.3",
     "qs": "^6.5.2",
     "underscore": "^1.9.1",
     "uuid": "^3.3.2",
