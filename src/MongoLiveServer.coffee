@@ -1,11 +1,13 @@
 _                    = require "underscore"
 async                = require "async"
 debug                = (require "debug") "mongo-live-server"
+dot                  = require "dot-object"
 http                 = require "http"
 uuid                 = require "uuid"
 qs                   = require "qs"
 WebSocket            = require "ws"
 MongoConnector       = require "mongo-changestream-connector"
+
 
 { defaultLogger }    = require "./lib"
 
@@ -214,17 +216,29 @@ class MongoLiveServer
 			switch operationType
 				when "insert"
 					if fields.length
-						data = _.pick change.fullDocument, fields
+						data = {}
+
+						_.forEach fields, (fieldName) ->
+							val = dot.pick fieldName, change.fullDocument
+							dot.str fieldName, val, data
 					else
 						data = change.fullDocument
 
 				when "update"
 					if fields.length
-						update = _.pick change.updateDescription.updatedFields, fields
+						update = {}
+
+						_.forEach fields, (fieldName) ->
+							val = dot.pick fieldName, change.fullDocument
+							dot.str fieldName, val, update
 					else
 						update = change.updateDescription.updatedFields
 
-					extra = _.pick change.fullDocument, extension
+					extra = {}
+
+					_.forEach extension, (fieldName) ->
+						val = dot.pick fieldName, change.fullDocument
+						dot.str fieldName, val, extra
 
 					data  = _.extend {}, update, extra
 
@@ -237,6 +251,8 @@ class MongoLiveServer
 				@log.error error if error
 
 		onClose = =>
+			@log.info "Client disconnects. Connection id: #{streamId}"
+
 			debug "Calling close down for change stream with id: #{streamId}"
 
 			return unless @changeStreams[streamId]
@@ -261,10 +277,7 @@ class MongoLiveServer
 		}
 
 		handleSocketDisconnect = =>
-			@log.info "Client disconnects. Connection id: #{streamId}"
-
 			onClose()
-
 			@_updateGaugeSockets()
 
 		handleSocketError = (error) =>

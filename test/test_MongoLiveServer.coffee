@@ -331,7 +331,7 @@ describe "Mongo Live Server Test", ->
 
 			query = qs.stringify
 				subscribe: ["insert"]
-				fields:    ["identity", "active"]
+				fields:    ["identity", "active", "nested.field"]
 
 			path = "#{address}/chargestations/live?#{query}"
 
@@ -344,9 +344,11 @@ describe "Mongo Live Server Test", ->
 					clearTimeout timeoutId
 					done new Error "Should NOT receive update message!"
 
+				console.log('message.insert: ', message.insert)
 				if message.insert
 					inserted = true
 					assert.ok message.insert.identity, "insert messages did NOT have identity!"
+					assert.ok message.insert.nested.field, "insert messages did not have nested.field!"
 					assert.equal typeof message.insert.active, "boolean", "insert messages did NOT have active!"
 					assert.ok not message.insert.lastHeartbeat, "insert messages did have lastHeartbeat!"
 
@@ -373,6 +375,8 @@ describe "Mongo Live Server Test", ->
 					identity:      "hidden charge station"
 					lastHeartbeat: moment().toISOString()
 					active:        true
+					nested:
+						field:  "one!"
 
 				cs.save (error) ->
 					return done error if error

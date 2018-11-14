@@ -18,6 +18,10 @@ module.exports =
 				type:    Boolean
 				default: false
 
+			nested:
+				new Schema
+					field: String
+
 		,
 			timestamps: true
 
