@@ -344,7 +344,6 @@ describe "Mongo Live Server Test", ->
 					clearTimeout timeoutId
 					done new Error "Should NOT receive update message!"
 
-				console.log('message.insert: ', message.insert)
 				if message.insert
 					inserted = true
 					assert.ok message.insert.identity, "insert messages did NOT have identity!"
