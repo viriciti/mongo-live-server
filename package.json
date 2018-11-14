@@ -1,6 +1,6 @@
 {
   "name": "mongo-live-server",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "license": "MIT",
   "homepage": "https://github.com/viriciti/mongo-live-server",
   "scripts": {
@@ -52,7 +52,7 @@
     "async": "^2.6.1",
     "config": "^2.0.1",
     "debug": "^3.1.0",
-    "mongo-changestream-connector": "^1.2.1",
+    "mongo-changestream-connector": "^1.2.2",
     "qs": "^6.5.2",
     "underscore": "^1.9.1",
     "uuid": "^3.3.2",
