@@ -281,7 +281,7 @@ class MongoLiveServer
 			@_updateGaugeSockets()
 
 		handleSocketError = (error) =>
-			socket.disconnect()
+			socket.close()
 			@log.error "Websocket error: #{error.message}"
 
 		socket
@@ -302,7 +302,7 @@ class MongoLiveServer
 		}, (error) =>
 			if error
 				@log.error error.message
-				return onClose()
+				return socket.close()
 
 			@_updateGaugeSockets()
 

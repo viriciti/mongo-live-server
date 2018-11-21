@@ -12,7 +12,7 @@ MongoLiveServer = require "../src"
 
 describe "Mongo Live Server Test", ->
 	address  = "ws://localhost:#{config.port}"
-	WAIT_FOR_WATCH  = 200
+	WAIT_FOR_WATCH  = 1000
 	models          = null
 	mongoLiveServer = null
 	mongoConnector  = null
@@ -57,7 +57,7 @@ describe "Mongo Live Server Test", ->
 
 			setTimeout ->
 				cb null, acls
-			, 100
+			, 50
 
 	getAllowed = ({ ids, aclHeaders }, cb) ->
 		ids = [].concat ids
@@ -160,7 +160,7 @@ describe "Mongo Live Server Test", ->
 					, WAIT_FOR_WATCH
 			return
 
-		it "should reject unknown route", (done) ->
+		it "should reject connection for unknown route", (done) ->
 			identity            = aclGroups[0].identity
 
 			options =
@@ -170,8 +170,26 @@ describe "Mongo Live Server Test", ->
 			socket = new WebSocket "#{address}/bogus/live", options
 
 			socket
-				.once "close", (statusCode) ->
+				.on "close", (statusCode) ->
 					assert.equal statusCode, 4004, "Eh? this should be the code"
+					done()
+			return
+
+		it "should reject connection when `getAllowed` calls back with error", (done) ->
+			chargestation       = testDocs[2].identity
+			identity            = aclGroups[0].identity
+
+			options =
+				headers:
+					"user-id": identity
+
+			query = qs.stringify
+				ids:       [ chargestation ]
+
+			socket = new WebSocket "#{address}/chargestations/live?#{query}", options
+
+			socket
+				.on "close", () ->
 					done()
 			return
 
@@ -187,7 +205,9 @@ describe "Mongo Live Server Test", ->
 			socket
 				.once "error", done
 				.once "open", () ->
-					socket.close()
+					setTimeout ->
+						socket.close()
+					, WAIT_FOR_WATCH / 4
 
 					setTimeout ->
 						sockets = mongoLiveServer.wsServer.clients.size
@@ -364,7 +384,7 @@ describe "Mongo Live Server Test", ->
 					timeoutId = setTimeout ->
 						socket.close()
 						done()
-					, 500
+					, WAIT_FOR_WATCH
 
 			databaseFlow = ->
 				update = $set: lastHeartbeat: moment().toISOString()
