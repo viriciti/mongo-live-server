@@ -228,29 +228,36 @@ describe "Mongo Live Server Test", ->
 				headers:
 					"user-id": identity
 
-			openAndCloseSocket = (close) ->
+			openAndCloseSocket = (cb) ->
 				socket = new WebSocket "#{address}/chargestations/live", options
 
 				socket
 					.once "error", done
 					.once "open", () ->
-						socket.close() if close
+						setTimeout ->
+							socket.close()
+							cb()
+						, 100
 
-			_.each [0...10], ->
-				openAndCloseSocket true
+			functions = _.map [0...10], ->
+				(cb) ->
+					openAndCloseSocket cb
 
-			openAndCloseSocket false
+			async.parallel functions, (error) ->
+				return done error if error
 
-			setTimeout ->
-				sockets = mongoLiveServer.wsServer.clients.size
+				socket = new WebSocket "#{address}/chargestations/live", options
 
-				streams = (_.keys mongoLiveServer.changeStreams).length
+				setTimeout ->
+					sockets = mongoLiveServer.wsServer.clients.size
 
-				assert.equal sockets, 1
-				assert.equal streams, 1
+					streams = (_.keys mongoLiveServer.changeStreams).length
 
-				done()
-			, 1000
+					assert.equal sockets, 1
+					assert.equal streams, 1
+
+					done()
+				, 1000
 
 		it "for all docs in querystring", (done) ->
 			identity = aclGroups[0].identity
