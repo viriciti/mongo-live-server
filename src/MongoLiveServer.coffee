@@ -131,7 +131,7 @@ class MongoLiveServer
 				return cb new Error mssg
 
 			# Because `getAllowed` is asynchronous we need to check connection 
-			if [ WebSocket.CLOSED, WebSocket.CLOSING ].includes socket.readyState
+			unless socket.readyState is WebSocket.OPEN
 				return cb new Error "Socket disconnected while getting allowed ids"
 
 			pipeline[0].$match.$and or= []
@@ -221,14 +221,16 @@ class MongoLiveServer
 						data = change.fullDocument
 
 				when "update"
-					if fields.length
-						update = {}
+					# if fields.length
+					# 	update = {}
 
-						_.forEach fields, (fieldName) ->
-							val = dot.pick fieldName, change.fullDocument
-							dot.str fieldName, val, update
-					else
-						update = change.updateDescription.updatedFields
+					# 	_.forEach fields, (fieldName) ->
+					# 		val = dot.pick fieldName, change.fullDocument
+					# 		dot.str fieldName, val, update
+					# else
+					# 	update = change.updateDescription.updatedFields
+
+					update = change.updateDescription.updatedFields
 
 					extra = {}
 
@@ -238,8 +240,8 @@ class MongoLiveServer
 
 					data  = _.extend {}, update, extra
 
-				else
-					throw new Error "Recieved unknown operation type! --> #{operationType}"
+			unless data
+				throw new Error "Could establish message for operation type: #{operationType}"
 
 			data = _.omit data, blacklistFields
 
@@ -255,9 +257,8 @@ class MongoLiveServer
 				return debug "Change stream already cleaned up. Connection id: #{streamId}"
 
 			delete @changeStreams[streamId]
-
 			@_updateGaugeStreams()
-			
+
 			socket.close()
 
 		onError = (error) =>
