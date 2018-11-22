@@ -12,7 +12,6 @@ MongoConnector       = require "mongo-changestream-connector"
 { defaultLogger }    = require "./lib"
 
 
-
 class MongoLiveServer
 	constructor: (args) ->
 		{
@@ -119,6 +118,7 @@ class MongoLiveServer
 			collection
 			onChange
 			onClose
+			onError
 			pipeline
 			socket
 			streamId
@@ -130,19 +130,17 @@ class MongoLiveServer
 				mssg = "Error getting allowed `#{model or collection}` documents: #{error}"
 				return cb new Error mssg
 
+			# Because `getAllowed` is asynchronous we need to check connection 
 			if [ WebSocket.CLOSED, WebSocket.CLOSING ].includes socket.readyState
 				return cb new Error "Socket disconnected while getting allowed ids"
 
 			pipeline[0].$match.$and or= []
 			pipeline[0].$match.$and.push "fullDocument.#{identityKey}": $in: allowed if allowed.length
 
-			onError = (error) =>
-				@log.error "Change stream error: #{error}"
-				cursor.close()
-
-			cursor = @mongoConnector.changeStream {
+			@changeStreams[streamId] = @mongoConnector.changeStream {
 				model
 				collection
+				streamId
 				onError
 				onClose
 				onChange
@@ -150,8 +148,6 @@ class MongoLiveServer
 				options:
 					fullDocument: "updateLookup" # make this optionable in query?
 			}
-
-			@changeStreams[streamId] = cursor
 
 			@_updateGaugeStreams()
 
@@ -207,9 +203,9 @@ class MongoLiveServer
 		# 		alive:      1
 		# 		connectors: 1
 
-		onChange = (change) ->
+		onChange = (change) =>
 			unless socket.readyState is WebSocket.OPEN
-				return @log.error "Socket not open"
+				return @log.error "Socket not open. Connection id: #{streamId}"
 
 			{ operationType } = change
 
@@ -250,43 +246,41 @@ class MongoLiveServer
 			socket.send (JSON.stringify "#{operationType}": data), (error) =>
 				@log.error error if error
 
+		##############
+		# change stream close <-> socket close
+		#########
+
 		onClose = =>
-			@log.info "Client disconnects. Connection id: #{streamId}"
+			unless @changeStreams[streamId]
+				return debug "Change stream already cleaned up. Connection id: #{streamId}"
 
-			debug "Calling close down for change stream with id: #{streamId}"
-
-			return unless @changeStreams[streamId]
-
-			@changeStreams[streamId].removeAllListeners [ "close" ]
-			@changeStreams[streamId].close()
 			delete @changeStreams[streamId]
 
-			# socket.removeAllListeners [ "close" ]
+			@_updateGaugeStreams()
+			
 			socket.close()
 
-			@_updateGaugeStreams()
+		onError = (error) =>
+			@log.error "Change stream error: #{error}"
 
-		@log.info "Client connects. Connection id: #{streamId}.", {
-			extension
-			fields
-			ids
-			ip
-			subscribe
-			url
-			aclHeaders
-		}
+			unless @changeStreams[streamId]
+				return debug "Change stream already cleaned up. Connection id: #{streamId}"
+
+			@changeStreams[streamId].close()
 
 		handleSocketDisconnect = =>
-			onClose()
+			@log.info "Client disconnected. Connection id: #{streamId}"
+
 			@_updateGaugeSockets()
+
+			unless @changeStreams[streamId]
+				return debug "Change stream already cleaned up. Connection id: #{streamId}"
+
+			@changeStreams[streamId].close()
 
 		handleSocketError = (error) =>
 			socket.close()
 			@log.error "Websocket error: #{error.message}"
-
-		socket
-			.once "close", handleSocketDisconnect
-			.once "error", handleSocketError
 
 		@_setupStream {
 			identityKey
@@ -295,6 +289,7 @@ class MongoLiveServer
 			collection
 			onChange
 			onClose
+			onError
 			pipeline
 			socket
 			streamId
@@ -303,6 +298,12 @@ class MongoLiveServer
 			if error
 				@log.error error.message
 				return socket.close()
+
+			socket
+				.on "close", handleSocketDisconnect
+				.on "error", handleSocketError
+
+			@log.info "Client connected. Connection id: #{streamId}", { extension, fields, ids, ip, subscribe, url, aclHeaders }
 
 			@_updateGaugeSockets()
 
@@ -348,11 +349,6 @@ class MongoLiveServer
 		# Sockets do NOT close when http server.close is called
 		@wsServer.clients.forEach (client) ->
 			client.close()
-
-		# this shouldn't be necessary, for we have onClose functions
-		# _.each (_.values @changeStreams), (stream) ->
-		# 	stream.removeAllListeners [ "close" ]
-		# 	stream.close()
 
 		async.series [
 			(cb) =>
