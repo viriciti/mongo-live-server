@@ -50,7 +50,6 @@ class MongoLiveServer
 		@unControlledHTTP      = Boolean @httpServer
 		@httpServer          or= http.createServer()
 		@changeStreams         = {}
-		@wsServers             = []
 		@defaultOperationTypes = ["update", "insert"]
 
 		# two more operation types
@@ -85,7 +84,8 @@ class MongoLiveServer
 			if not @mongo.useMongoose and model
 				throw new Error "Each watch config object should have the `collection` property (and not `model`)"
 
-			debug "Setting up web socket server for path: #{livePath}. Blacklist: #{blacklistFields?.join " "}"
+			debug "Setting up web socket server for path: #{livePath}.
+			 #{blacklistFields ? "Blacklist: " + blacklistFields.join " " : ""}"
 
 		@mongoConnector = new MongoConnector _.extend {}, @mongo, log: @log
 		@wsServer       = new WebSocket.Server server: @httpServer
@@ -157,6 +157,8 @@ class MongoLiveServer
 		url = req.url.split("/live").shift().slice(1)
 
 		route = _.find @watches, path: url
+
+		debug "incoming connection with route #{route}"
 
 		return socket.close 4004, "#{req.url} not found" unless route
 
@@ -298,7 +300,7 @@ class MongoLiveServer
 		}, (error) =>
 			if error
 				@log.error error.message
-				return socket.close()
+				return socket.close 4000
 
 			socket
 				.on "close", handleSocketDisconnect
@@ -309,7 +311,7 @@ class MongoLiveServer
 			@_updateGaugeSockets()
 
 	start: (cb) =>
-		debug "Mongo Live Server starting"
+		debug "starting"
 
 		async.series [
 			(cb) =>
@@ -342,10 +344,14 @@ class MongoLiveServer
 					cb()
 
 		], (error) ->
-			cb? error
+			return cb? error if error
+
+			debug "started"
+
+			cb?()
 
 	stop: (cb) =>
-		debug "Mongo Live Server stopping"
+		debug "stopping"
 
 		# Sockets do NOT close when http server.close is called
 		@wsServer.clients.forEach (client) ->
@@ -366,6 +372,10 @@ class MongoLiveServer
 
 					cb()
 		], (error) ->
-			cb? error
+			return cb? error if error
+
+			debug "stopped"
+
+			cb?()
 
 module.exports = MongoLiveServer
