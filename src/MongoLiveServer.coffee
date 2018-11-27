@@ -1,6 +1,7 @@
 _                    = require "underscore"
 async                = require "async"
 debug                = (require "debug") "mongo-live-server"
+pingPongDebug        = (require "debug") "ping-pong"
 dot                  = require "dot-object"
 http                 = require "http"
 uuid                 = require "uuid"
@@ -23,6 +24,7 @@ class MongoLiveServer
 			Gauge
 			metricLabel
 			@getAllowed
+			@pingPong
 			@aclHeaders = [
 				"user-id"
 				"company-id"
@@ -50,7 +52,6 @@ class MongoLiveServer
 		@unControlledHTTP      = Boolean @httpServer
 		@httpServer          or= http.createServer()
 		@changeStreams         = {}
-		@wsServers             = []
 		@defaultOperationTypes = ["update", "insert"]
 
 		# two more operation types
@@ -78,19 +79,36 @@ class MongoLiveServer
 
 			throw new Error "Watch configuration should have a path." unless path
 
-			livePath                                     = "/#{path}/live"
+			livePath = "/#{path}/live"
 
 			if @mongo.useMongoose and collection
 				throw new Error "Each watch config object should have the `model` property (and not `collection`)"
 			if not @mongo.useMongoose and model
 				throw new Error "Each watch config object should have the `collection` property (and not `model`)"
 
-			debug "Setting up web socket server for path: #{livePath}. Blacklist: #{blacklistFields?.join " "}"
+			debug "Setting up web socket server for path: #{livePath}.
+			 #{if blacklistFields then "Blacklist: " + blacklistFields.join " " else ""}"
 
 		@mongoConnector = new MongoConnector _.extend {}, @mongo, log: @log
 		@wsServer       = new WebSocket.Server server: @httpServer
 
 		@wsServer.on "connection", @_handleConnection
+
+		if @pingPong
+			@log.info "Mongo Live Server Running with ping pong"
+
+			@pingPongInterval = setInterval =>
+				# Can't use underscore _.forEach
+				@wsServer.clients.forEach (socket) ->
+					if not socket.isAlive
+						@log.error "Closing not alive socket. Connection id: #{socket.streamId}"
+						return socket.terminate()
+
+					socket.isAlive = false
+
+					socket.ping ->
+						pingPongDebug "ping - Connection id: #{socket.streamId}"
+			, @pingPong
 
 	_updateGaugeStreams: =>
 		mnt = (_.keys @changeStreams).length
@@ -130,7 +148,7 @@ class MongoLiveServer
 				mssg = "Error getting allowed `#{model or collection}` documents: #{error}"
 				return cb new Error mssg
 
-			# Because `getAllowed` is asynchronous we need to check connection 
+			# Because `getAllowed` is asynchronous we need to check connection
 			unless socket.readyState is WebSocket.OPEN
 				return cb new Error "Socket disconnected while getting allowed ids"
 
@@ -158,12 +176,16 @@ class MongoLiveServer
 
 		route = _.find @watches, path: url
 
+		debug "incoming connection with route #{route}"
+
 		return socket.close 4004, "#{req.url} not found" unless route
 
 		{ identityKey, model, collection, blacklistFields } = route
 
-		aclHeaders               = _.pick req.headers, @aclHeaders
 		streamId                 = uuid.v4()
+		socket.streamId          = streamId
+
+		aclHeaders               = _.pick req.headers, @aclHeaders
 		ip                       = req.connection.remoteAddress
 		splitUrl                 = req.url.split "?"
 		query                    = qs.parse splitUrl[1]
@@ -221,15 +243,6 @@ class MongoLiveServer
 						data = change.fullDocument
 
 				when "update"
-					# if fields.length
-					# 	update = {}
-
-					# 	_.forEach fields, (fieldName) ->
-					# 		val = dot.pick fieldName, change.fullDocument
-					# 		dot.str fieldName, val, update
-					# else
-					# 	update = change.updateDescription.updatedFields
-
 					update = change.updateDescription.updatedFields
 
 					extra = {}
@@ -249,7 +262,7 @@ class MongoLiveServer
 				@log.error error if error
 
 		##############
-		# change stream close <-> socket close
+		# change stream close <-> socket terminate
 		#########
 
 		onClose = =>
@@ -259,7 +272,8 @@ class MongoLiveServer
 			delete @changeStreams[streamId]
 			@_updateGaugeStreams()
 
-			socket.close()
+			socket.terminate()
+			# socket.close()
 
 		onError = (error) =>
 			@log.error "Change stream error: #{error}"
@@ -280,7 +294,8 @@ class MongoLiveServer
 			@changeStreams[streamId].close()
 
 		handleSocketError = (error) =>
-			socket.close()
+			socket.terminate()
+			# socket.close()
 			@log.error "Websocket error: #{error.message}"
 
 		@_setupStream {
@@ -298,18 +313,26 @@ class MongoLiveServer
 		}, (error) =>
 			if error
 				@log.error error.message
-				return socket.close()
+				return socket.close 4000
 
 			socket
 				.on "close", handleSocketDisconnect
 				.on "error", handleSocketError
+
+			if @pingPong
+				pong = ->
+					pingPongDebug "pong - Connection id: #{socket.streamId}"
+					@isAlive = true
+
+				socket.isAlive = true
+				socket.on 'pong', pong
 
 			@log.info "Client connected. Connection id: #{streamId}", { extension, fields, ids, ip, subscribe, url, aclHeaders }
 
 			@_updateGaugeSockets()
 
 	start: (cb) =>
-		debug "Mongo Live Server starting"
+		debug "starting"
 
 		async.series [
 			(cb) =>
@@ -342,14 +365,22 @@ class MongoLiveServer
 					cb()
 
 		], (error) ->
-			cb? error
+			return cb? error if error
+
+			debug "started"
+
+			cb?()
 
 	stop: (cb) =>
-		debug "Mongo Live Server stopping"
+		debug "stopping"
+
+		clearInterval @pingPongInterval
 
 		# Sockets do NOT close when http server.close is called
-		@wsServer.clients.forEach (client) ->
-			client.close()
+		# Can't use underscore _.forEach
+		@wsServer.clients.forEach (socket) ->
+			socket.terminate()
+			# socket.close()
 
 		async.series [
 			(cb) =>
@@ -366,6 +397,10 @@ class MongoLiveServer
 
 					cb()
 		], (error) ->
-			cb? error
+			return cb? error if error
+
+			debug "stopped"
+
+			cb?()
 
 module.exports = MongoLiveServer
