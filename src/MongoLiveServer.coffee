@@ -99,7 +99,7 @@ class MongoLiveServer
 
 			@pingPongInterval = setInterval =>
 				# Can't use underscore _.forEach
-				@wsServer.clients.forEach (socket) ->
+				@wsServer.clients.forEach (socket) =>
 					if not socket.isAlive
 						@log.error "Closing not alive socket. Connection id: #{socket.streamId}"
 						return socket.terminate()
