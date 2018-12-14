@@ -143,7 +143,7 @@ class MongoLiveServer
 			aclHeaders
 		} = payload
 
-		@getAllowed { ids, aclHeaders }, (error, allowed = []) =>
+		@getAllowed { ids, aclHeaders }, (error, allowed) =>
 			if error
 				mssg = "Error getting allowed `#{model or collection}` documents: #{error}"
 				return cb new Error mssg
@@ -153,7 +153,9 @@ class MongoLiveServer
 				return cb new Error "Socket disconnected while getting allowed ids"
 
 			pipeline[0].$match.$and or= []
-			pipeline[0].$match.$and.push "fullDocument.#{identityKey}": $in: allowed if allowed.length
+
+			if Array.isArray allowed
+				pipeline[0].$match.$and.push "fullDocument.#{identityKey}": $in: allowed
 
 			@changeStreams[streamId] = @mongoConnector.changeStream {
 				model
