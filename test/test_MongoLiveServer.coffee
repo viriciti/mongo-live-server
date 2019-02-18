@@ -349,6 +349,29 @@ describe "Mongo Live Server Test", ->
 					, WAIT_FOR_WATCH
 			return
 
+		# Actually should not even open the socket, reject it
+		it "close socket for non existent model", (done) ->
+			identity = aclGroups[0].identity
+
+			options =
+				headers:
+					"user-id": identity
+
+			query = qs.stringify extension: ["user-id"]
+
+			path = "#{address}/fake_stations/live?#{query}"
+
+			socket = new WebSocket path, options
+
+			socket
+				.once "error", done
+				.once "open", () ->
+				.once "close", () ->
+					# done new Error "Opened socket for non existent error"
+					done()
+
+			return
+
 		it "for specified operation type(s) (and also fields fields)", (done) ->
 			identity = aclGroups[0].identity
 

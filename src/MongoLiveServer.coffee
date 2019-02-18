@@ -176,11 +176,12 @@ class MongoLiveServer
 	_handleConnection: (socket, req) =>
 		url = req.url.split("/live").shift().slice(1)
 
+		# This step shoule actually take place in the authorization process of the WS server, right before upgrade
 		route = _.find @watches, path: url
 
-		debug "incoming connection with route #{route}"
+		return socket.close 4004, "Path `#{url}` not found" unless route
 
-		return socket.close 4004, "#{req.url} not found" unless route
+		debug "incoming connection with route `#{url}`"
 
 		{ identityKey, model, collection, blacklistFields } = route
 
