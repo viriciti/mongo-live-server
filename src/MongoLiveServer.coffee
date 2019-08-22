@@ -143,7 +143,7 @@ class MongoLiveServer
 			aclHeaders
 		} = payload
 
-		@getAllowed { ids, aclHeaders }, (error, allowed = []) =>
+		@getAllowed { ids, aclHeaders }, (error, allowed) =>
 			if error
 				mssg = "Error getting allowed `#{model or collection}` documents: #{error}"
 				return cb new Error mssg
@@ -153,7 +153,9 @@ class MongoLiveServer
 				return cb new Error "Socket disconnected while getting allowed ids"
 
 			pipeline[0].$match.$and or= []
-			pipeline[0].$match.$and.push "fullDocument.#{identityKey}": $in: allowed if allowed.length
+
+			if Array.isArray allowed
+				pipeline[0].$match.$and.push "fullDocument.#{identityKey}": $in: allowed
 
 			@changeStreams[streamId] = @mongoConnector.changeStream {
 				model
@@ -174,11 +176,12 @@ class MongoLiveServer
 	_handleConnection: (socket, req) =>
 		url = req.url.split("/live").shift().slice(1)
 
+		# This step shoule actually take place in the authorization process of the WS server, right before upgrade
 		route = _.find @watches, path: url
 
-		debug "incoming connection with route #{route}"
+		return socket.close 4004, "Path `#{url}` not found" unless route
 
-		return socket.close 4004, "#{req.url} not found" unless route
+		debug "incoming connection with route `#{url}`"
 
 		{ identityKey, model, collection, blacklistFields } = route
 
@@ -312,7 +315,7 @@ class MongoLiveServer
 			aclHeaders
 		}, (error) =>
 			if error
-				@log.error error.message
+				debug error.message
 				return socket.close 4000
 
 			socket
