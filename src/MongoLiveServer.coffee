@@ -315,7 +315,7 @@ class MongoLiveServer
 			aclHeaders
 		}, (error) =>
 			if error
-				@log.error error.message
+				debug error.message
 				return socket.close 4000
 
 			socket
