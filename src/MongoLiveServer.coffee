@@ -254,7 +254,7 @@ class MongoLiveServer
 						val = dot.pick fieldName, change.fullDocument
 						dot.str fieldName, val, extra
 
-					data  = _.extend {}, update, extra
+					data = _.extend {}, update, extra
 
 			unless data
 				throw new Error "Could establish message for operation type: #{operationType}"

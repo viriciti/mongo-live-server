@@ -21,35 +21,38 @@ describe "Mongo Live Server Test", ->
 		console.error "unhandledRejection", error
 
 	testDocs = [
-			identity:      "sakifs first station"
-			lastHeartbeat: moment().toISOString()
-			active:        true
-		,
-			identity:      "sakifs second station"
-			lastHeartbeat: moment().toISOString()
-			active:        true
-		,
-			identity:      "pims first station"
-			lastHeartbeat: moment().toISOString()
-			active:        true
+		identity:      "sakifs first station"
+		lastHeartbeat: moment().toISOString()
+		active:        true
+	,
+		identity:      "sakifs second station"
+		lastHeartbeat: moment().toISOString()
+		active:        true
+	,
+		identity:      "pims first station"
+		lastHeartbeat: moment().toISOString()
+		active:        true
 	]
 
 	aclGroups = [
-				identity:      "sakif"
-				chargestation: "sakifs first station"
-			,
-				identity:      "sakif"
-				chargestation: "sakifs second station"
-			,
-				identity:      "sakif"
-				chargestation: "read this"
-			,
-				identity:      "sakif"
-				chargestation: "hidden charge station"
-			,
-				identity:      "pim"
-				chargestation: "pims first station"
-		]
+		identity:      "sakif"
+		chargestation: "sakifs first station"
+	,
+		identity:      "sakif"
+		chargestation: "sakifs second station"
+	,
+		identity:      "sakif"
+		chargestation: "read this"
+	,
+		identity:      "sakif"
+		chargestation: "hidden charge station"
+	,
+		identity:      "pim"
+		chargestation: "pims first station"
+	,
+		identity:      "sakif"
+		chargestation: "identity"
+	]
 
 	aclClient =
 		getChargestations: (userId, cb) ->
@@ -337,6 +340,51 @@ describe "Mongo Live Server Test", ->
 
 				(new models.Chargestation data).save (error) ->
 					return done error if error
+
+			socket
+				.once "error", done
+				.once "open", () ->
+
+					setTimeout ->
+
+						databaseFlow()
+
+					, WAIT_FOR_WATCH
+			return
+
+		it "send all extenstion fields", (done) ->
+			identity = aclGroups[0].identity
+
+			options =
+				headers:
+					"user-id": identity
+
+			query = qs.stringify
+				subscribe:     ["update"]
+				extension:     ["active", "identity", "alive"]
+
+			path = "#{address}/chargestations/live?#{query}"
+
+			socket = new WebSocket path, options
+
+			socket.on "message", (message) ->
+				message = parseMessage message
+
+				assert.equal message.update.alive,  false
+				assert.equal message.update.active, true
+				assert.equal message.update.identity, "identity"
+				socket.close()
+				done()
+
+			databaseFlow = ->
+				(new models.Chargestation identity: "identity").save (error, doc) ->
+					return done error if error
+
+					data =
+						active: true
+
+					(_.extend doc, data).save (error, doc) ->
+						return done error if error
 
 			socket
 				.once "error", done
