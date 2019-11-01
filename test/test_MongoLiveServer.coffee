@@ -360,8 +360,9 @@ describe "Mongo Live Server Test", ->
 					"user-id": identity
 
 			query = qs.stringify
-				subscribe:     ["update"]
+				subscribe:     ["create", "update"]
 				extension:     ["active", "identity", "alive"]
+				fields:        ["alive"]
 
 			path = "#{address}/chargestations/live?#{query}"
 
